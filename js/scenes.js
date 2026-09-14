@@ -46,7 +46,7 @@ export function matmulScene({
 }
 
 // Output row i depends on row i of each input — one row per step.
-export function rowScene({ inputs, ops = [], output, idle, explain, done }) {
+export function rowScene({ inputs, ops = [], output, idle, explain, done, extra = null }) {
   const n = output.matrix.length;
   return {
     total: n,
@@ -58,7 +58,7 @@ export function rowScene({ inputs, ops = [], output, idle, explain, done }) {
         parts.push(matrixTable({ ...inp, hlRow: i, small: inp.small ?? true }));
       });
       parts.push(result(matrixTable({ ...output, filled: (r) => r < k, hlRow: i })));
-      const body = row(parts);
+      const body = extra ? el('div', { class: 'stack' }, [row(parts), extra(k)]) : row(parts);
       if (!k) return { body, caption: idle };
       const ex = explain(i);
       const caption = ex.caption + (k === n ? ` ${doneCaption(done || 'Every row is computed.')}` : '');

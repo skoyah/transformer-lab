@@ -341,3 +341,59 @@ export function bindRender(render, { quietKeys = [] } = {}) {
 }
 
 export { STAGES };
+
+// ---------------------------------------------------------------------------
+// Attention arcs: the sentence on a baseline, an arc from each asking word
+// to each word it listens to. Width and opacity follow the share.
+// rows: [{ i, w }] — asker index and its weights over `tokens`.
+// focus: asker index to emphasise (others fade); hover a word to focus it.
+// ---------------------------------------------------------------------------
+
+export function attentionArcs({ tokens, rows, focus = null, minShare = 0.03 }) {
+  const n = tokens.length;
+  const gap = Math.max(64, Math.min(110, 720 / Math.max(n, 1)));
+  const pad = 28;
+  const w = pad * 2 + gap * (n - 1);
+  const h = Math.min(240, 90 + gap * 1.3);
+  const y = h - 30;
+  const x = (i) => pad + i * gap;
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('class', 'arcs');
+  svg.style.maxWidth = `${w}px`;
+  if (focus != null) svg.dataset.focus = focus;
+  const add = (tag, attrs, parent = svg) => {
+    const node = document.createElementNS(svgNS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    parent.append(node);
+    return node;
+  };
+  const defs = add('defs', {});
+  const marker = add('marker', { id: 'arc-head', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 7, markerHeight: 7, markerUnits: 'userSpaceOnUse', orient: 'auto-start-reverse' }, defs);
+  add('path', { d: 'M0,0 L8,4 L0,8 z', fill: 'currentColor' }, marker);
+  add('line', { x1: pad - 12, x2: w - pad + 12, y1: y, y2: y, class: 'base' });
+
+  for (const { i, w: weights } of rows) {
+    weights.forEach((share, j) => {
+      if (share < minShare) return;
+      const cls = `arc from-${i}${i === focus ? ' focus' : ''}`;
+      const width = (0.8 + 7 * share).toFixed(2);
+      const opacity = (0.18 + 0.82 * share).toFixed(2);
+      if (i === j) {
+        add('path', { d: `M${x(i) - 6},${y - 4} C${x(i) - 22},${y - 34} ${x(i) + 22},${y - 34} ${x(i) + 6},${y - 4}`, class: cls, 'stroke-width': width, opacity, 'marker-end': 'url(#arc-head)' });
+      } else {
+        const lift = Math.min((y - 10) * 2, 30 + Math.abs(i - j) * gap * 0.7);
+        add('path', { d: `M${x(i)},${y - 6} Q${(x(i) + x(j)) / 2},${y - lift} ${x(j)},${y - 6}`, class: cls, 'stroke-width': width, opacity, 'marker-end': 'url(#arc-head)' });
+      }
+    });
+  }
+  tokens.forEach((t, i) => {
+    const g = add('g', { class: `word${i === focus ? ' focus' : ''}`, transform: `translate(${x(i)},${y + 18})` });
+    add('text', { 'text-anchor': 'middle', 'font-size': 13 }, g).textContent = t;
+    add('text', { 'text-anchor': 'middle', 'font-size': 9, y: 12, class: 'idx' }, g).textContent = `#${i}`;
+    g.addEventListener('mouseenter', () => { svg.dataset.hover = i; });
+    g.addEventListener('mouseleave', () => { delete svg.dataset.hover; });
+  });
+  return svg;
+}

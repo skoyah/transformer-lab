@@ -1,5 +1,5 @@
 import { getExperiment, getDerived, setWeightCell, setCausal } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, chapterNav, tokenLabels, dimLabels } from '../ui.js';
 import { player, chapterControls } from '../player.js';
 import { matmulScene, rowScene, transposeScene, vec } from '../scenes.js';
 
@@ -100,6 +100,10 @@ function render() {
         };
       },
       done: 'Each row adds up to 1. Darker = more attention.',
+      extra: (k) => el('div', { class: 'arcs-wrap' }, [
+        attentionArcs({ tokens: d.tokens, rows: d.attentionWeights.slice(0, k).map((w, i) => ({ i, w })), focus: k ? k - 1 : null }),
+        el('p', { class: 'fig-caption', text: k ? 'Each arc goes from the word asking to a word it listens to; thicker = bigger share. Hover a word to see only its arcs.' : 'The same table drawn as arcs over the sentence — it fills in as rows are computed.' }),
+      ]),
     }) }),
     underHood('A[i][j] = exp(S[i][j]) / Σ_k exp(S[i][k])', `<p>Applied row by row. Hidden cells have score −∞, and exp(−∞) = 0, so they get exactly no share.</p>`),
   ]);

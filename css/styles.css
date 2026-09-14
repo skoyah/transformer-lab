@@ -335,3 +335,16 @@ table.pred tr.hlrow td { background: var(--accent-soft); }
 .toc li.played .idx { color: var(--accent); }
 .ghost-cell { position: absolute; z-index: 3; pointer-events: none; display: flex; align-items: center; justify-content: flex-end; padding: 0 .45rem; border-radius: 5px; font-family: var(--mono); box-shadow: 0 2px 8px rgba(0,0,0,.18); color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { table.matrix td.pulse, .chip.pulse { animation: none; } }
+
+/* ---------- attention arcs ---------- */
+svg.arcs { width: 100%; height: auto; display: block; color: var(--accent); overflow: visible; }
+svg.arcs .base { stroke: var(--line-strong); stroke-width: 1; }
+svg.arcs .arc { fill: none; stroke: var(--muted); transition: opacity .2s; }
+svg.arcs .arc.focus { stroke: var(--accent); }
+svg.arcs .word text { fill: var(--ink); font-family: var(--serif); cursor: default; }
+svg.arcs .word .idx { fill: var(--muted); font-family: var(--mono); }
+svg.arcs .word.focus text { fill: var(--accent); font-weight: 600; }
+svg.arcs[data-hover] .arc { opacity: .06 !important; }
+svg.arcs[data-hover="0"] .arc.from-0, svg.arcs[data-hover="1"] .arc.from-1, svg.arcs[data-hover="2"] .arc.from-2, svg.arcs[data-hover="3"] .arc.from-3, svg.arcs[data-hover="4"] .arc.from-4, svg.arcs[data-hover="5"] .arc.from-5, svg.arcs[data-hover="6"] .arc.from-6, svg.arcs[data-hover="7"] .arc.from-7, svg.arcs[data-hover="8"] .arc.from-8, svg.arcs[data-hover="9"] .arc.from-9, svg.arcs[data-hover="10"] .arc.from-10, svg.arcs[data-hover="11"] .arc.from-11, svg.arcs[data-hover="12"] .arc.from-12, svg.arcs[data-hover="13"] .arc.from-13, svg.arcs[data-hover="14"] .arc.from-14, svg.arcs[data-hover="15"] .arc.from-15 { opacity: 1 !important; stroke: var(--accent); }
+.arcs-wrap { width: 100%; margin-top: .6rem; }
+.arcs-wrap .fig-caption { margin-top: .2rem; }

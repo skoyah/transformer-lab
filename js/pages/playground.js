@@ -1,6 +1,6 @@
 import { tokenize, forwardIds, generate, topK, lossOf } from '../transformer.js';
 import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, train } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs } from '../ui.js';
 import { player } from '../player.js';
 import { worked } from '../scenes.js';
 
@@ -60,6 +60,7 @@ function generateScene(model, ids, pg, out) {
         caption: `Word <b>${k}</b>: run the whole block on “${esc(ctx.join(' '))}”, take the last position's bet — <b>“${esc(g.token)}”</b> at ${pct(g.prob)}${pg.temperature > 0 ? ' (drawn from the bets, not always the favourite)' : ''} — and append it.` + (k === n ? ' <span class="done-mark">Done.</span>' : ''),
         worked: el('div', { class: 'trace' }, [
           el('p', { class: 'fig-caption', style: 'margin:0 0 .4rem', text: 'What the last position listened to (Chapter 3, live):' }),
+          attentionArcs({ tokens: ctx, rows: [{ i: ctx.length - 1, w: g.attention }], focus: ctx.length - 1 }),
           bars,
           el('p', { class: 'fig-caption', style: 'margin:.5rem 0 0', text: `Top bets: ${bets}` }),
         ]),
