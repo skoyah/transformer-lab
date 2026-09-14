@@ -395,3 +395,13 @@ svg.norm-strip .dot { fill: rgb(var(--pos-rgb)); stroke: var(--paper); stroke-wi
 svg.norm-strip .dot.neg { fill: rgb(var(--neg-rgb)); }
 @keyframes slidex { from { transform: translateX(var(--x0)); } to { transform: translateX(var(--x1)); } }
 @media (prefers-reduced-motion: reduce) { svg.norm-strip .dot { animation: none; } }
+
+/* ---------- causal mask curtain ---------- */
+table.matrix td.masked { position: relative; color: var(--muted); overflow: hidden; }
+table.matrix td.masked::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: 5px;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 10%, transparent) 0 3px, transparent 3px 8px);
+}
+table.matrix tr.hlrow td.masked::after { animation: curtain .5s cubic-bezier(.4,0,.2,1) both; animation-delay: calc(320ms + var(--c) * 55ms); }
+@keyframes curtain { from { transform: translateX(105%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { table.matrix tr.hlrow td.masked::after { animation: none; } }

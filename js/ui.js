@@ -200,8 +200,8 @@ export function matrixTable(opts) {
       const isCell = hlCell && hlCell[0] === r && hlCell[1] === c;
       const isPulse = pulse && pulse[0] === r && pulse[1] === c;
       const td = el('td', {
-        style: isBlank ? '' : heatStyle(v, heat, maxAbs),
-        class: [isBlank ? 'blank' : '', hlCol === c ? 'hlcol' : '', hlRow === r ? 'hlrow' : '', isCell ? 'hlcell' : '', isPulse ? 'pulse' : ''].join(' '),
+        style: (isBlank ? '' : heatStyle(v, heat, maxAbs)) + `; --c:${c}`,
+        class: [isBlank ? 'blank' : '', hlCol === c ? 'hlcol' : '', hlRow === r ? 'hlrow' : '', isCell ? 'hlcell' : '', isPulse ? 'pulse' : '', v === -Infinity && !isBlank ? 'masked' : ''].join(' '),
         dataset: { r, c },
       });
       if (isBlank) {
