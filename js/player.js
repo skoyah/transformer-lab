@@ -154,6 +154,11 @@ function moveHighlights(root, overlay) {
     if (cols.length) wanted.set(`col-${t}`, { rect: unionRect(cols), kind: 'src' });
     if (cell) wanted.set(`cell-${t}`, { rect: unionRect([cell]), kind: 'target' });
   });
+  // Non-table highlights: the tokenizer's reading head and the current chip.
+  const scan = root.querySelector('.sentence-scan .cur');
+  if (scan) wanted.set('scan', { rect: unionRect([scan]), kind: 'scan' });
+  const chip = root.querySelector('.chips .chip.pulse');
+  if (chip) wanted.set('chip', { rect: unionRect([chip]), kind: 'chip' });
   for (const box of overlay.children) if (!wanted.has(box.dataset.name)) box.classList.add('off');
   for (const [name, { rect, kind }] of wanted) {
     let box = overlay.querySelector(`[data-name="${name}"]`);

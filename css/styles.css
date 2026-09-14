@@ -320,6 +320,8 @@ table.matrix th.hl, table.matrix tr.hlrow th { color: var(--accent); font-weight
   transition: left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1), width .45s cubic-bezier(.4,0,.2,1), height .45s cubic-bezier(.4,0,.2,1), opacity .25s; }
 .hl-box.target { border-color: var(--accent); background: transparent; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
 .hl-box.off { opacity: 0; }
+.hl-box.scan { border: 0; border-bottom: 3px solid var(--accent); border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.hl-box.chip { border-color: var(--accent); background: transparent; border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) { .hl-box { transition: none; } }
 table.matrix td.pulse { animation: cellpop .55s cubic-bezier(.2,.9,.3,1.2); }
 @keyframes cellpop { 0% { transform: scale(.6); background: var(--hl); } 100% { transform: scale(1); } }
@@ -329,7 +331,7 @@ table.matrix td.pulse { animation: cellpop .55s cubic-bezier(.2,.9,.3,1.2); }
 .sentence-scan { font-family: var(--serif); font-size: 1.35rem; line-height: 1.6; padding: .4rem .2rem; }
 .sentence-scan .todo { color: var(--muted); opacity: .55; }
 .sentence-scan .seen { color: var(--ink); border-bottom: 2px solid var(--line-strong); }
-.sentence-scan .cur { color: var(--accent); border-bottom: 2px solid var(--accent); background: var(--accent-soft); border-radius: 3px; }
+.sentence-scan .cur { color: var(--accent); }
 .sentence-scan .gap { color: var(--muted); }
 
 .chapter-controls { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin: -0.5rem 0 2rem; font-family: var(--sans); }
