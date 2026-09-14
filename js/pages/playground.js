@@ -1,12 +1,13 @@
 import { tokenize, forwardIds, generate, topK, lossOf } from '../transformer.js';
 import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, train } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable } from '../ui.js';
+import { player } from '../player.js';
+import { worked } from '../scenes.js';
 
 initPage('playground.html');
 const content = document.getElementById('content');
 
 let rerolls = 0;          // session-only: which random draw to use when sampling
-let selected = null;      // session-only: which generated token's attention is shown
 
 // These inputs live across re-renders so typing and dragging are never interrupted.
 let renderTimer = null;
@@ -33,31 +34,38 @@ function suggestionBar(model, ids, label) {
   }, [model.vocab[t.id], el('small', { text: pct(t.p) })])));
 }
 
-function generatedText(model, ids, pg, which) {
-  const out = generate(model, ids, { steps: pg.steps, temperature: pg.temperature, seed: rerolls });
-  const chips = [
-    ...ids.map((id) => el('span', { class: 'chip prompt', text: model.vocab[id] })),
-    ...out.map((g, i) => el('button', {
-      class: `chip gen ${selected && selected.which === which && selected.i === i ? 'sel' : ''}`,
-      style: `--conf:${g.prob.toFixed(2)}`, title: `${pct(g.prob, 1)} sure · click to see what it looked at`,
-      onclick: () => { selected = { which, i }; render(); },
-    }, [g.token, el('small', { text: pct(g.prob) })])),
-  ];
-  let trace = null;
-  if (selected && selected.which === which && out[selected.i]) {
-    const g = out[selected.i];
-    const ctx = g.context.map((id) => model.vocab[id]);
-    trace = el('div', { class: 'trace' }, [
-      el('p', { class: 'fig-caption', style: 'margin:0 0 .4rem', text: `To choose “${g.token}”, the last position listened to:` }),
-      el('div', { class: 'bars' }, ctx.map((w, j) => el('div', { class: 'barrow' }, [
+function generateScene(model, ids, pg, out) {
+  const n = out.length;
+  return {
+    total: n,
+    frame(k) {
+      const chips = [
+        ...ids.map((id) => el('span', { class: 'chip prompt', text: model.vocab[id] })),
+        ...out.slice(0, k).map((g, i) => el('span', { class: `chip gen ${i === k - 1 ? 'pulse' : ''}`, style: `--conf:${g.prob.toFixed(2)}`, title: `${pct(g.prob, 1)} sure` }, [g.token, el('small', { text: pct(g.prob) })])),
+        ...out.slice(k).map(() => el('span', { class: 'chip gen todo', text: '…' })),
+      ];
+      const body = el('div', { class: 'chips' }, chips);
+      if (ids.length === 0) return { body, caption: 'Type a word the model knows to give it something to continue.' };
+      if (!k) return { body, caption: `Press play to let it write ${n} word${n > 1 ? 's' : ''}, one at a time.` };
+      const g = out[k - 1];
+      const ctx = g.context.map((id) => model.vocab[id]);
+      const bars = el('div', { class: 'bars' }, ctx.map((w, j) => el('div', { class: 'barrow' }, [
         el('span', { class: 'w', text: w }),
         el('span', { class: 'bar', style: `width:${Math.max(2, g.attention[j] * 160)}px` }),
         el('span', { class: 'p', text: pct(g.attention[j]) }),
-      ]))),
-      el('p', { class: 'fig-caption', style: 'margin:.5rem 0 0', text: `Runner-up bets: ${topK(g.probs, 4).slice(1).map((t) => `${model.vocab[t.id]} ${pct(t.p)}`).join(' · ')}` }),
-    ]);
-  }
-  return el('div', {}, [el('div', { class: 'chips' }, chips), trace]);
+      ])));
+      const bets = topK(g.probs, 4).map((t) => `${model.vocab[t.id]} ${pct(t.p)}`).join(' · ');
+      return {
+        body,
+        caption: `Word <b>${k}</b>: run the whole block on “${esc(ctx.join(' '))}”, take the last position's bet — <b>“${esc(g.token)}”</b> at ${pct(g.prob)}${pg.temperature > 0 ? ' (drawn from the bets, not always the favourite)' : ''} — and append it.` + (k === n ? ' <span class="done-mark">Done.</span>' : ''),
+        worked: el('div', { class: 'trace' }, [
+          el('p', { class: 'fig-caption', style: 'margin:0 0 .4rem', text: 'What the last position listened to (Chapter 3, live):' }),
+          bars,
+          el('p', { class: 'fig-caption', style: 'margin:.5rem 0 0', text: `Top bets: ${bets}` }),
+        ]),
+      };
+    },
+  };
 }
 
 function modelCard(title, sub, model, ids, pg, which) {
@@ -66,7 +74,11 @@ function modelCard(title, sub, model, ids, pg, which) {
     el('div', { class: 'sub', text: 'Next-word suggestions' }),
     suggestionBar(model, ids, which),
     el('div', { class: 'sub', text: 'Let it write' }),
-    generatedText(model, ids, pg, which),
+    player({
+      id: `gen-${which}`, track: false,
+      key: JSON.stringify([ids, pg.steps, pg.temperature, rerolls, model.updatedAt, model.trainingHistory.length]),
+      scene: generateScene(model, ids, pg, generate(model, ids, { steps: pg.steps, temperature: pg.temperature, seed: rerolls })),
+    }),
   ]);
 }
 
@@ -94,7 +106,7 @@ function render() {
   if (document.activeElement !== prompt) prompt.value = pg.prompt;
   stepsInput.value = pg.steps;
   if (document.activeElement !== tempInput) tempInput.value = pg.temperature;
-  const rerollBtn = el('button', { text: 'Different draw', onclick: () => { rerolls++; selected = null; render(); }, disabled: pg.temperature <= 0 });
+  const rerollBtn = el('button', { text: 'Different draw', onclick: () => { rerolls++; render(); }, disabled: pg.temperature <= 0 });
   const controls = el('div', { class: 'card' }, [
     el('label', {}, ['Your prompt (saved)', prompt]),
     unknown.length ? el('p', { class: 'fig-caption', style: 'margin-top:.6rem' }, [
@@ -117,7 +129,7 @@ function render() {
   const demo = lesson('Fresh vs. trained', [
     controls,
     compare,
-    prose(`<p>The suggestion keys are the model's top three bets for the next word (tap one to accept it, like on a phone). “Let it write” keeps going for ${pg.steps} words; the small number is how sure it was. Click a written word to see which earlier words it paid attention to when choosing — that's Chapter 3, live.</p>`),
+    prose(`<p>The suggestion keys are the model's top three bets for the next word (tap one to accept it, like on a phone). Press play under “Let it write” to watch it continue the prompt one word at a time — each step shows which earlier words it paid attention to and what else it considered.</p>`),
     callout('try', `<ul>
       <li>Train 25 steps and compare the two columns. The fresh model spreads its bets thinly; yours should reproduce your text almost word for word — it has memorised it, which is all a tiny model trained on one sentence can do.</li>
       <li>Start the prompt with a word from the <em>middle</em> of your text. Does your model continue correctly from there?</li>

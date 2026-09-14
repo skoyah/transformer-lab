@@ -64,7 +64,8 @@ export function createExperiment(overrides = {}) {
     }),
     trainingHistory: [],
     snapshots: [],
-    animation: { enabled: true, stepDelayMs: 220 },
+    animation: { speed: 'normal' },
+    progress: {},            // stageId -> 'done' once the reader has played it to the end
     playground: { prompt: 'the cat', steps: 4, temperature: 0 },
     currentStep: 'index.html',
     updatedAt: Date.now(),
@@ -120,6 +121,8 @@ function writeStorage(value) {
 
 let state = readStorage() || createExperiment();
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
+if (!state.progress) state.progress = {};
+if (!state.animation || !state.animation.speed) state.animation = { speed: 'normal' };
 
 // ---------------------------------------------------------------------------
 // Derived cache + change notification
@@ -149,9 +152,9 @@ export function onChange(fn) {
 // The single write path: persist, invalidate, notify.
 function commit(changedKeys, extra = {}) {
   state.updatedAt = Date.now();
-  writeStorage(state);
   const affected = affectedStages(changedKeys);
-  for (const id of affected) dirty.add(id);
+  for (const id of affected) { dirty.add(id); delete state.progress[id]; } // needs replaying
+  writeStorage(state);
   const event = { changedKeys, affected, state, ...extra };
   for (const fn of listeners) fn(event);
   return event;
@@ -264,6 +267,16 @@ export function setLearningRate(lr) {
   if (!Number.isFinite(v) || v <= 0 || v === state.learningRate) return null;
   state.learningRate = v;
   commitQuiet(['learningRate']);
+}
+
+export function setProgress(stageId, value) {
+  if (value) state.progress[stageId] = value; else delete state.progress[stageId];
+  commitQuiet(['progress']);
+}
+
+export function clearProgress(stageIds) {
+  for (const id of stageIds) delete state.progress[id];
+  commitQuiet(['progress']);
 }
 
 export function setAnimation(prefs) {

@@ -54,16 +54,18 @@ function howToRead() {
   return lesson('How to read this book', [
     prose(`
       <p>Six short chapters follow the text through the model, in the order the model itself works: words → numbers → meaning → attention → thinking → prediction → and finally a working autocomplete built from it all.</p>
+      <p>Every stage is a small player. Nothing is computed in front of you until you press <strong>play</strong>; then it happens one cell or one row at a time, with a line explaining that step. Step back, scrub, or skip to the end whenever you like. If you change an input, the stages after it simply wait to be played again.</p>
       <p>Two kinds of numbers appear throughout:</p>
       <ul>
         <li><span class="tag stored">saved input</span> — a value you can edit. There are only a handful: the text, a random seed, and the weight tables. These are the model's memory, and they are saved in your browser.</li>
         <li><span class="tag derived">recomputed</span> — everything else. These are never stored; they are recalculated from the inputs whenever something upstream changes, like formulas in a spreadsheet.</li>
       </ul>`),
-    callout('idea', `<p>Think of a spreadsheet. A few cells hold typed-in values; every other cell is a formula. Change one input and the dependent cells update in a cascade. This model is exactly that: edit a weight, and the panel in the corner shows which stages recalculate, in order.</p>`),
+    callout('idea', `<p>Think of a spreadsheet. A few cells hold typed-in values; every other cell is a formula. Change one input and the dependent cells have to be recalculated. This model is exactly that — except here you turn the crank yourself: edit a weight, and the panel in the corner lists which stages are waiting for you to press play.</p>`),
   ]);
 }
 
 function tocPanel() {
+  const s = getExperiment();
   const d = getDerived();
   const items = [];
   let currentPage = null;
@@ -78,8 +80,9 @@ function tocPanel() {
       ]));
     }
     const value = d[stage.id];
-    items.push(el('li', { dataset: { stage: stage.id } }, [
-      el('span', { class: 'idx', text: '↓' }),
+    const played = s.progress[stage.id] === 'done';
+    items.push(el('li', { dataset: { stage: stage.id }, class: played ? 'played' : '' }, [
+      el('span', { class: 'idx', text: played ? '✓' : '↓' }),
       el('span', {}, [el('a', { href: `${stage.page}#${stage.id}`, text: stage.label }), el('span', { class: 'what', text: STAGE_WHAT[stage.id] || '' })]),
       el('span', { class: 'shape', text: stage.id === 'prediction' ? `${value.length}` : shapeOf(value) }),
     ]));
@@ -87,7 +90,7 @@ function tocPanel() {
   const ch6 = CHAPTERS[6];
   items.push(el('li', { class: 'chapter' }, [el('span', { class: 'idx', text: 'Ch 6' }), el('a', { href: ch6.href, text: ch6.title }), el('span')]));
   return lesson('The journey at a glance', [
-    prose(`<p>Every stage the text goes through, in order. The numbers on the right are the shape of each result for your text (rows × columns). Change something anywhere and watch the affected stages light up here.</p>`),
+    prose(`<p>Every stage the text goes through, in order. The numbers on the right are the shape of each result for your text (rows × columns). A tick means you have played that stage since its inputs last changed.</p>`),
     el('div', { class: 'card flush' }, el('ol', { class: 'toc' }, items)),
   ]);
 }
@@ -99,8 +102,7 @@ function settingsPanel() {
   const hidden = el('select', {}, HIDDEN_OPTIONS.map((h) => el('option', { value: h, text: h, selected: h === s.config.hidden })));
   const lr = el('input', { type: 'number', value: s.learningRate, step: 0.01, min: 0.001 });
   const causal = el('input', { type: 'checkbox', checked: s.config.causal });
-  const anim = el('input', { type: 'checkbox', checked: s.animation.enabled });
-  const delay = el('input', { type: 'number', value: s.animation.stepDelayMs, step: 50, min: 0, max: 2000 });
+  const speed = el('select', {}, ['slow', 'normal', 'fast'].map((k) => el('option', { value: k, text: k, selected: k === s.animation.speed })));
 
   const applyModel = () => {
     const next = { seed: Number(seed.value), dim: Number(dim.value), hidden: Number(hidden.value) };
@@ -116,8 +118,7 @@ function settingsPanel() {
   hidden.addEventListener('change', applyModel);
   lr.addEventListener('change', () => setLearningRate(lr.value));
   causal.addEventListener('change', () => setCausal(causal.checked));
-  anim.addEventListener('change', () => setAnimation({ enabled: anim.checked }));
-  delay.addEventListener('change', () => setAnimation({ stepDelayMs: Math.max(0, Number(delay.value) || 0) }));
+  speed.addEventListener('change', () => setAnimation({ speed: speed.value }));
 
   return lesson('Settings', [
     prose(`<p>Sensible defaults are set. Come back here if you want a bigger model, a different random start, or a calmer panel.</p>`),
@@ -130,8 +131,7 @@ function settingsPanel() {
         el('label', { class: 'inline' }, [causal, 'No peeking at later words']),
       ]),
       el('div', { class: 'controls', style: 'margin-top: 1rem' }, [
-        el('label', { class: 'inline' }, [anim, 'Animate recalculation']),
-        el('label', {}, ['Step delay (ms)', delay]),
+        el('label', {}, ['Playback speed', speed]),
         el('button', { class: 'danger', text: 'Reset everything', onclick: () => confirm('Reset the text, settings and all weights to defaults? Bookmarks are kept.') && resetExperiment() }),
       ]),
     ]),
@@ -181,4 +181,4 @@ function render() {
   content.replaceChildren(heroPanel(), howToRead(), tocPanel(), settingsPanel(), snapshotsPanel());
 }
 
-bindRender(render, { quietKeys: ['snapshots'] });
+bindRender(render, { quietKeys: ['snapshots', 'progress'] });

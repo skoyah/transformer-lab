@@ -146,6 +146,7 @@ export function initPage(active) {
   updateSentence();
   onChange((event) => {
     updateSentence();
+    if (event.quiet) return;
     if (event.affected.length || event.reset || event.external) showRecalculation(event);
   });
   mountLog();
@@ -168,11 +169,15 @@ function heatStyle(value, mode, maxAbs) {
 }
 
 // opts: { title, matrix, rowLabels, colLabels, editable, onEdit, heat, decimals,
-//         highlightRows, dimRows, cornerLabel, note, small }
+//         highlightRows, dimRows, cornerLabel, note, small,
+//         filled(r,c) -> bool   cells not yet computed are drawn blank
+//         hlRow, hlCol, hlCell  the row / column / cell involved in the current step
+//         pulse                 [r,c] cell that was just filled (pop animation) }
 export function matrixTable(opts) {
   const {
     title, matrix, rowLabels, colLabels, editable = false, onEdit, heat = 'diverging',
     decimals = 2, highlightRows = null, dimRows = null, cornerLabel = '', note = null, small = false,
+    filled = null, hlRow = null, hlCol = null, hlCell = null, pulse = null,
   } = opts;
   const rows = Array.isArray(matrix[0]) ? matrix : [matrix];
   let maxAbs = 0;
@@ -182,17 +187,26 @@ export function matrixTable(opts) {
   if (colLabels) {
     table.append(el('thead', {}, el('tr', {}, [
       el('th', { class: 'corner', text: cornerLabel }),
-      ...colLabels.map((c) => el('th', { text: c })),
+      ...colLabels.map((c, j) => el('th', { text: c, class: hlCol === j ? 'hl' : '' })),
     ])));
   }
   const tbody = el('tbody');
   rows.forEach((row, r) => {
-    const cls = [highlightRows && highlightRows.has(r) ? 'hl' : '', dimRows && dimRows.has(r) ? 'dim' : ''].join(' ');
+    const cls = [highlightRows && highlightRows.has(r) ? 'hl' : '', dimRows && dimRows.has(r) ? 'dim' : '', hlRow === r ? 'hlrow' : ''].join(' ');
     const tr = el('tr', { class: cls });
     if (rowLabels || colLabels) tr.append(el('th', { text: rowLabels ? rowLabels[r] : '' }));
     row.forEach((v, c) => {
-      const td = el('td', { style: heatStyle(v, heat, maxAbs) });
-      if (editable) {
+      const isBlank = filled && !filled(r, c);
+      const isCell = hlCell && hlCell[0] === r && hlCell[1] === c;
+      const isPulse = pulse && pulse[0] === r && pulse[1] === c;
+      const td = el('td', {
+        style: isBlank ? '' : heatStyle(v, heat, maxAbs),
+        class: [isBlank ? 'blank' : '', hlCol === c ? 'hlcol' : '', hlRow === r ? 'hlrow' : '', isCell ? 'hlcell' : '', isPulse ? 'pulse' : ''].join(' '),
+        dataset: { r, c },
+      });
+      if (isBlank) {
+        td.textContent = '·';
+      } else if (editable) {
         td.append(el('input', {
           type: 'text', inputmode: 'decimal', value: fmt(v, decimals), 'aria-label': `${title || 'cell'} ${r},${c}`,
           onchange: (e) => {
@@ -266,7 +280,7 @@ function describeChange(event) {
   if (event.reset) return 'You reset the experiment';
   if (event.snapshot) return `You loaded the bookmark “${event.snapshot.name}”`;
   if (event.external) return 'The experiment changed in another tab';
-  if (event.training) return `You trained ${event.steps} step${event.steps > 1 ? 's' : ''} — surprise ${fmt(event.training.lossBefore, 2)} → ${fmt(event.training.lossAfter, 2)}`;
+  if (event.training) return `You trained ${event.steps} step${event.steps > 1 ? 's' : ''} — surprise ${fmt(event.training.lossBefore, 2)} → ${fmt(event.training.lossAfter, 2)}. Weights changed, so every stage needs replaying.`;
   if (event.reinitialised) return `You changed ${event.changedKeys.filter((k) => k !== 'weights').map((k) => KEY_LABELS[k] || k).join(' and ')} — all weights were re-rolled`;
   if (event.cell) {
     const c = event.cell;
@@ -276,35 +290,28 @@ function describeChange(event) {
   return `You changed ${event.changedKeys.map((k) => KEY_LABELS[k] || k).join(', ')}`;
 }
 
-export function showRecalculation(event) {
-  const prefs = getExperiment().animation || { enabled: true, stepDelayMs: 220 };
-  const delay = prefs.enabled ? prefs.stepDelayMs : 0;
-  const mine = ++sequence;
+let trainingRun = null; // { entry, steps, lossStart } — consecutive training steps share one entry
 
+export function showRecalculation(event) {
+  if (!logEl) return;
+  if (event.training && trainingRun && list().firstChild === trainingRun.entry) {
+    trainingRun.steps += event.steps;
+    trainingRun.entry.querySelector('.cause').textContent =
+      `You trained ${trainingRun.steps} steps — surprise ${fmt(trainingRun.lossStart, 2)} → ${fmt(event.training.lossAfter, 2)}. Weights changed, so every stage needs replaying.`;
+    return;
+  }
+  const chips = event.affected.map((id) => {
+    const stage = STAGE_BY_ID[id];
+    return el('a', { class: 'chip-link', href: `${stage.page}#${id}`, text: stage.label, title: 'needs replaying — click to go there' });
+  });
   const entry = el('li', { class: 'entry' }, [
     el('div', { class: 'cause', text: describeChange(event) }),
-    el('ol', { class: 'steps' }, [el('li', { class: 'stored', text: 'saved' })]),
+    el('div', { class: 'hint', text: event.affected.length ? 'Saved. Nothing is shown until you press play on each stage:' : 'Saved.' }),
+    el('div', { class: 'steps' }, chips),
   ]);
-  if (logEl) {
-    list().prepend(entry);
-    while (list().children.length > 5) list().lastChild.remove();
-  }
-
-  const steps = entry.querySelector('.steps');
-  event.affected.forEach((id, i) => {
-    // Always asynchronous: pages re-render synchronously after this listener,
-    // so the DOM is queried at flash time rather than captured now.
-    setTimeout(() => {
-      if (mine !== sequence && delay) return; // a newer change superseded this one
-      const stage = STAGE_BY_ID[id];
-      steps.append(el('li', { text: stage ? stage.label : id, title: 'recalculated' }));
-      document.querySelectorAll(`[data-stage="${id}"]`).forEach((node) => {
-        node.classList.remove('recalc');
-        void node.offsetWidth; // restart the CSS animation
-        node.classList.add('recalc');
-      });
-    }, 16 + i * delay); // 16ms: land after bindRender's deferred re-render
-  });
+  list().prepend(entry);
+  trainingRun = event.training ? { entry, steps: event.steps, lossStart: event.training.lossBefore } : null;
+  while (list().children.length > 5) list().lastChild.remove();
 }
 
 // ---------------------------------------------------------------------------

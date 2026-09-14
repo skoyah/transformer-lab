@@ -17,7 +17,9 @@ ES modules need an HTTP origin; opening `index.html` via `file://` will not work
 |---|---|
 | `js/transformer.js` | Pure maths + the dependency graph (`STAGES`). No DOM, no storage. `forward(state)`, `forwardAttention(state)`, `affectedStages(keys)`, `trainStep(state, lr)`. |
 | `js/state.js` | Owns persistent state, reads/writes `localStorage`, snapshots, derived-value cache. Single write path: `commit(changedKeys)` → save → invalidate via graph → notify. |
-| `js/ui.js` | Shared rendering: nav, matrix tables (heat-mapped, editable), stage sections, the visible recalculation log. |
+| `js/ui.js` | Shared rendering: nav, prose/callouts, matrix tables (heat-mapped, editable, step highlights), the "what just changed" panel. |
+| `js/player.js` | Step-through players (nan.fyi style): idle until played, ⏮ ◀ ▶ ▶\| ⏭, counter, scrubber, speed; chapter-level play/reveal/reset. |
+| `js/scenes.js` | Turns a computed stage into captioned steps (one cell / row / token per step) for the players. |
 | `js/pages/*.js` | One script per chapter. Pages call `getExperiment()` / `getDerived()` and render prose + live figures; they contain no maths. |
 
 ## Chapters
@@ -33,3 +35,7 @@ ES modules need an HTTP origin; opening `index.html` via `file://` will not work
 **Derived** (never stored): tokens, embeddings, X, Q/K/V, Kᵀ, scores, scaled scores, softmax, attention output, residuals, layer norms, FFN hidden/output, logits, probabilities, prediction. Recomputed from `STAGES` in `transformer.js`; only the stages downstream of a changed input are recalculated (`forward(state, prev, dirty)`).
 
 Snapshots store the persistent experiment only; loading one rebuilds the model and recomputes everything.
+
+## Playback model
+
+Nothing is shown until the reader presses play on a stage. Each stage reveals its result one small step at a time with a caption for that step. Changing any input (text, weight, setting) puts every downstream stage back to idle — upstream stages keep their state. A stage played to the end stays revealed (`progress` in localStorage) until something upstream changes.
