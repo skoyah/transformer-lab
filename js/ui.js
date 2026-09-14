@@ -465,3 +465,53 @@ export function softmaxBars({ labels, scores, hiddenMask = null, stepMs = 1300 }
     col(`÷ ${fmt(sum)}`, shares, 'share', 1, 2),
   ]);
 }
+
+// ---------------------------------------------------------------------------
+// Layer norm as a strip: the row's values as dots on one number line, then
+// slid so their mean is 0, then stretched/squeezed to unit spread.
+// ---------------------------------------------------------------------------
+
+export function normStrip({ values, labels, stepMs = 1300, eps = 1e-5 }) {
+  const n = values.length;
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  const std = Math.sqrt(variance + eps);
+  const centred = values.map((v) => v - mean);
+  const normed = centred.map((v) => v / std);
+  const range = Math.max(1.5, ...values.map(Math.abs), ...centred.map(Math.abs), ...normed.map(Math.abs)) * 1.15;
+  const W = 520, H = 118, padL = 86, padR = 16, rowH = 30;
+  const x = (v) => padL + ((v + range) / (2 * range)) * (W - padL - padR);
+  const phaseMs = Math.max(260, Math.min(650, stepMs * 0.3));
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'norm-strip');
+  const add = (tag, attrs, parent = svg) => {
+    const node = document.createElementNS(svgNS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    parent.append(node);
+    return node;
+  };
+  const rows = [
+    { name: 'row', vals: values, prev: values, note: `mean ${fmt(mean)}` },
+    { name: '− mean', vals: centred, prev: values, note: 'centred on 0' },
+    { name: `÷ ${fmt(std)}`, vals: normed, prev: centred, note: 'spread 1' },
+  ];
+  rows.forEach((r, ri) => {
+    const y = 18 + ri * rowH + 12;
+    add('line', { x1: padL, x2: W - padR, y1: y, y2: y, class: 'axis' });
+    add('line', { x1: x(0), x2: x(0), y1: y - 8, y2: y + 8, class: 'zero' });
+    add('text', { x: padL - 8, y: y + 4, 'text-anchor': 'end', class: 'lbl' }).textContent = r.name;
+    add('text', { x: W - padR, y: y - 9, 'text-anchor': 'end', class: 'note' }).textContent = r.note;
+    if (ri === 0) add('line', { x1: x(mean), x2: x(mean), y1: y - 10, y2: y + 10, class: 'mean' });
+    r.vals.forEach((v, i) => {
+      const c = add('circle', { cx: 0, cy: y, r: 5.5, class: `dot ${v < 0 ? 'neg' : 'pos'}` });
+      c.style.setProperty('--x0', `${x(r.prev[i])}px`);
+      c.style.setProperty('--x1', `${x(v)}px`);
+      c.style.animationDelay = `${ri * phaseMs}ms`;
+      c.style.animationDuration = `${phaseMs}ms`;
+      add('title', {}, c).textContent = `${labels ? labels[i] + ': ' : ''}${fmt(v)}`;
+    });
+  });
+  return svg;
+}

@@ -1,13 +1,13 @@
 import { getExperiment, getDerived, setWeightCell } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, chapterNav, tokenLabels, dimLabels } from '../ui.js';
-import { player, chapterControls } from '../player.js';
+import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { player, chapterControls, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, vec } from '../scenes.js';
 
 initPage('ffn.html');
 const content = document.getElementById('content');
 const STAGES_HERE = ['residual1', 'norm1', 'ffnHidden', 'ffnOutput', 'residual2', 'norm2'];
 
-function layerNormExplain(input, output, tokens, name) {
+function layerNormExplain(input, output, tokens, dims, speed) {
   return (i) => {
     const r = input[i];
     const mean = r.reduce((a, b) => a + b, 0) / r.length;
@@ -15,6 +15,7 @@ function layerNormExplain(input, output, tokens, name) {
     return {
       caption: `Row <b>${i}</b> (“${esc(tokens[i])}”): subtract its average ${fmt(mean)}, divide by its spread ${fmt(Math.sqrt(variance + 1e-5))}.`,
       worked: `<span class="a">${vec(r)}</span><span class="eq">− ${fmt(mean)}</span><span class="eq">÷ ${fmt(Math.sqrt(variance + 1e-5))}</span><span class="eq">=</span><span class="result">${vec(output[i])}</span>`,
+      extra: normStrip({ values: r, labels: dims, stepMs: SPEEDS[speed] || SPEEDS.normal }),
     };
   };
 }
@@ -54,7 +55,7 @@ function render() {
       inputs: [{ title: 'R₁', matrix: d.residual1, rowLabels: toks, colLabels: dims }],
       output: { title: 'N₁ — normalised', matrix: d.norm1, rowLabels: toks, colLabels: dims },
       idle: 'Press play to normalise each row.',
-      explain: layerNormExplain(d.residual1, d.norm1, d.tokens),
+      explain: layerNormExplain(d.residual1, d.norm1, d.tokens, dims, s.animation.speed),
       done: 'Every row now averages 0 with spread 1.',
     }) }),
     underHood('N[i] = (R[i] − mean(R[i])) / sqrt(var(R[i]) + ε)', `<p>Done independently for each row. Real models also learn a scale and shift per column; we leave those out to keep the picture clean.</p>`),
@@ -113,7 +114,7 @@ function render() {
       inputs: [{ title: 'R₂', matrix: d.residual2, rowLabels: toks, colLabels: dims }],
       output: { title: 'N₂ — the block\'s output', matrix: d.norm2, rowLabels: toks, colLabels: dims },
       idle: 'Press play to normalise once more.',
-      explain: layerNormExplain(d.residual2, d.norm2, d.tokens),
+      explain: layerNormExplain(d.residual2, d.norm2, d.tokens, dims, s.animation.speed),
       done: 'One final vector per token. Chapter 5 turns these into predictions.',
     }) }),
     callout('try', `<ul>

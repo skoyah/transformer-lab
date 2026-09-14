@@ -383,3 +383,15 @@ table.matrix td.hov-cell { box-shadow: inset 0 0 0 2px var(--warm); cursor: help
 .sbar .val { font-family: var(--mono); color: var(--muted); font-size: 11.5px; }
 @keyframes growbar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) { .sbar .fill { animation: none; } }
+
+/* ---------- layer norm strip ---------- */
+svg.norm-strip { width: 100%; max-width: 520px; height: auto; display: block; margin-top: .6rem; font-family: var(--sans); }
+svg.norm-strip .axis { stroke: var(--line-strong); }
+svg.norm-strip .zero { stroke: var(--muted); stroke-dasharray: 2 2; }
+svg.norm-strip .mean { stroke: var(--warm); stroke-width: 2; }
+svg.norm-strip .lbl { fill: var(--ink-soft); font-size: 12px; font-family: var(--mono); }
+svg.norm-strip .note { fill: var(--muted); font-size: 10px; }
+svg.norm-strip .dot { fill: rgb(var(--pos-rgb)); stroke: var(--paper); stroke-width: 1.5; transform: translateX(var(--x1)); animation: slidex both ease-in-out; }
+svg.norm-strip .dot.neg { fill: rgb(var(--neg-rgb)); }
+@keyframes slidex { from { transform: translateX(var(--x0)); } to { transform: translateX(var(--x1)); } }
+@media (prefers-reduced-motion: reduce) { svg.norm-strip .dot { animation: none; } }
