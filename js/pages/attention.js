@@ -1,5 +1,6 @@
 import { getExperiment, getDerived, setWeightCell, setCausal } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { SPEEDS } from '../player.js';
 import { player, chapterControls } from '../player.js';
 import { matmulScene, rowScene, transposeScene, vec } from '../scenes.js';
 
@@ -97,6 +98,7 @@ function render() {
         return {
           caption: `Row <b>${i}</b>: “${esc(d.tokens[i])}” gives its biggest share, <b>${pct(d.attentionWeights[i][best])}</b>, to “${esc(d.tokens[best])}”${best === i ? ' (itself)' : ''}.`,
           worked: `<span class="eq">e^scores =</span><span class="a">${vec(exps)}</span><span class="eq">sum =</span><b>${fmt(sum)}</b><span class="eq">shares =</span><span class="result">${vec(d.attentionWeights[i])}</span>`,
+          extra: softmaxBars({ labels: d.tokens, scores: rowS, stepMs: SPEEDS[s.animation.speed] || SPEEDS.normal }),
         };
       },
       done: 'Each row adds up to 1. Darker = more attention.',

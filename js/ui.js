@@ -430,3 +430,37 @@ export function attentionArcs({ tokens, rows, focus = null, minShare = 0.03 }) {
   });
   return svg;
 }
+
+// ---------------------------------------------------------------------------
+// Softmax as three bar charts: raw scores → e^score → shares. Bars grow in
+// sequence so the "exponential makes winners win big" step is visible.
+// ---------------------------------------------------------------------------
+
+export function softmaxBars({ labels, scores, hiddenMask = null, stepMs = 1300 }) {
+  const finite = scores.map((v) => (v === -Infinity ? null : v));
+  const exps = finite.map((v) => (v == null ? 0 : Math.exp(v)));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  const shares = exps.map((e) => (sum ? e / sum : 0));
+  const maxAbs = Math.max(0.01, ...finite.filter((v) => v != null).map((v) => Math.abs(v)));
+  const maxExp = Math.max(0.01, ...exps);
+  const phaseMs = Math.max(220, Math.min(600, stepMs * 0.28));
+  const col = (title, values, kind, scale, phase) => el('div', { class: 'sbars' }, [
+    el('div', { class: 'sbars-title', text: title }),
+    ...values.map((v, i) => {
+      const hidden = finite[i] == null;
+      const pctW = hidden ? 0 : Math.min(100, (Math.abs(v) / scale) * 100);
+      return el('div', { class: `sbar ${kind} ${hidden ? 'hidden' : ''} ${v < 0 ? 'neg' : ''}` }, [
+        el('span', { class: 'lbl', text: labels[i] }),
+        el('span', { class: 'track' }, el('span', { class: 'fill', style: `width:${pctW}%; animation-delay:${phase * phaseMs}ms; animation-duration:${phaseMs}ms` })),
+        el('span', { class: 'val', text: hidden ? 'hidden' : kind === 'share' ? pct(v) : fmt(v) }),
+      ]);
+    }),
+  ]);
+  return el('div', { class: 'softmax-bars' }, [
+    col('scores', finite.map((v) => v ?? 0), 'raw', maxAbs, 0),
+    el('span', { class: 'op', text: '→' }),
+    col('e^score', exps, 'exp', maxExp, 1),
+    el('span', { class: 'op', text: '→' }),
+    col(`÷ ${fmt(sum)}`, shares, 'share', 1, 2),
+  ]);
+}

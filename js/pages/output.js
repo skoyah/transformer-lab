@@ -1,6 +1,6 @@
 import { crossEntropy } from '../transformer.js';
 import { getExperiment, getDerived, setWeightCell, setLearningRate, train } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, chapterNav, tokenLabels, dimLabels } from '../ui.js';
 import { player, chapterControls, pauseAll, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, predictionScene, vec } from '../scenes.js';
 
@@ -74,6 +74,7 @@ function render() {
         return {
           caption: `Row <b>${i}</b> — after “${esc(d.tokens[i])}”: e to each score, divide by the total.`,
           worked: `<span class="eq">e^scores =</span><span class="a">${vec(exps)}</span><span class="eq">sum =</span><b>${fmt(sum)}</b><span class="eq">bets =</span><span class="result">${vec(d.probs[i])}</span>`,
+          extra: softmaxBars({ labels: vocabLabels, scores: d.logits[i], stepMs: SPEEDS[s.animation.speed] || SPEEDS.normal }),
         };
       },
       done: 'Rows sum to 1.',

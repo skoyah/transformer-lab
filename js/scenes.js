@@ -70,7 +70,8 @@ export function rowScene({ inputs, ops = [], output, idle, explain, done, extra 
       if (!k) return { body, caption: idle };
       const ex = explain(i);
       const caption = ex.caption + (k === n ? ` ${doneCaption(done || 'Every row is computed.')}` : '');
-      return { body, caption, worked: ex.worked ? worked(ex.worked) : null };
+      const workedNode = ex.worked ? worked(ex.worked) : null;
+      return { body, caption, worked: ex.extra ? el('div', {}, [workedNode, ex.extra]) : workedNode };
     },
   };
 }
