@@ -6,6 +6,7 @@ import {
 } from '../state.js';
 import { initPage, bindRender, el, fmt, pct, esc, lesson, prose, callout, CHAPTERS } from '../ui.js';
 
+const arrivedFrom = getExperiment().currentStep;
 initPage('index.html');
 const content = document.getElementById('content');
 
@@ -42,9 +43,8 @@ function heroPanel() {
       el('h3', { style: 'margin-top:0', text: 'Right now the model thinks…' }),
       prose(`<p>…that after <strong>“${esc(d.tokens[last])}”</strong> the next word is <strong>“${esc(pred.token)}”</strong> (${pct(pred.prob)} sure).${s.trainingHistory.length ? '' : ' It has never been trained, so this is no better than a random guess — by Chapter 5 you will fix that.'}</p>`),
       el('p', { style: 'margin:0' }, [
-        el('a', { href: s.currentStep && s.currentStep !== 'index.html' ? s.currentStep : 'tokens.html', class: 'primary' }, [
-          el('button', { class: 'primary', text: s.currentStep && s.currentStep !== 'index.html' ? 'Continue reading →' : 'Start with Chapter 1 →' }),
-        ]),
+        el('button', { class: 'primary', text: arrivedFrom && arrivedFrom !== 'index.html' ? 'Continue reading →' : 'Start with Chapter 1 →',
+          onclick: () => { location.href = arrivedFrom && arrivedFrom !== 'index.html' ? arrivedFrom : 'tokens.html'; } }),
       ]),
     ]),
   ]);

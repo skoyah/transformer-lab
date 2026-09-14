@@ -8,6 +8,16 @@ const content = document.getElementById('content');
 let rerolls = 0;          // session-only: which random draw to use when sampling
 let selected = null;      // session-only: which generated token's attention is shown
 
+// These inputs live across re-renders so typing and dragging are never interrupted.
+let renderTimer = null;
+const scheduleRender = () => { clearTimeout(renderTimer); renderTimer = setTimeout(render, 120); };
+const prompt = el('input', { type: 'text', 'aria-label': 'Prompt', style: 'width:100%; font-family: var(--serif); font-size: 1.15rem; padding: .6rem .8rem', placeholder: 'type a few words the model knows…',
+  oninput: (e) => { setPlayground({ prompt: e.target.value }); scheduleRender(); } });
+const stepsInput = el('input', { type: 'number', min: 1, max: 12, 'aria-label': 'Words to write',
+  onchange: (e) => { setPlayground({ steps: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }); render(); } });
+const tempInput = el('input', { type: 'range', min: 0, max: 2, step: 0.1, 'aria-label': 'Creativity',
+  oninput: (e) => { setPlayground({ temperature: Number(e.target.value) }); scheduleRender(); } });
+
 function promptIds(s, words) {
   return words.filter((w) => s.vocab.includes(w)).map((w) => s.vocab.indexOf(w));
 }
@@ -61,6 +71,9 @@ function modelCard(title, sub, model, ids, pg, which) {
 }
 
 function render() {
+  // Capture focus first: building the new tree moves the persistent inputs, which blurs them.
+  const active = document.activeElement;
+  const sel = active === prompt ? [prompt.selectionStart, prompt.selectionEnd] : null;
   const s = getExperiment();
   const d = getDerived();
   const pg = s.playground;
@@ -72,15 +85,15 @@ function render() {
   const lossNow = lossOf(s);
   const lossFresh = lossOf(fresh);
 
-  const prompt = el('input', { type: 'text', value: pg.prompt, 'aria-label': 'Prompt', style: 'width:100%; font-family: var(--serif); font-size: 1.15rem; padding: .6rem .8rem', placeholder: 'type a few words the model knows…',
-    oninput: (e) => setPlayground({ prompt: e.target.value }) });
-
   const intro = lesson('The keyboard on your phone', [
     prose(`<p>When you type a message and three suggested words appear above the keyboard, this is what happened: your words were turned into tokens, run through a model like the one in this book, and the top three bets came out. Chatbots do the same thing in a loop — pick a word, add it to the text, run again.</p>
       <p>Below, the exact model you have been reading about does both jobs. To make the difference visible, it runs twice: once with <strong>freshly rolled weights</strong> (the same random start you had before touching anything), and once with <strong>your current weights</strong>, ${steps ? `after ${steps} training step${steps > 1 ? 's' : ''}` : 'which you have not trained yet'}.</p>`),
     steps ? null : callout('try', `<p>You haven't trained the model yet, so both sides will look equally clueless. Press <strong>Train 25 steps</strong> below (or go to Chapter 5) and come back — that's the whole point of this page.</p>`),
   ]);
 
+  if (document.activeElement !== prompt) prompt.value = pg.prompt;
+  stepsInput.value = pg.steps;
+  if (document.activeElement !== tempInput) tempInput.value = pg.temperature;
   const rerollBtn = el('button', { text: 'Different draw', onclick: () => { rerolls++; selected = null; render(); }, disabled: pg.temperature <= 0 });
   const controls = el('div', { class: 'card' }, [
     el('label', {}, ['Your prompt (saved)', prompt]),
@@ -89,9 +102,8 @@ function render() {
       el('button', { class: 'ghost', style: 'color: var(--accent)', text: `Teach it ${unknown.length > 1 ? 'these words' : 'this word'} (random meaning)`, onclick: () => addWords(unknown) }),
     ]) : null,
     el('div', { class: 'controls', style: 'margin-top: .9rem' }, [
-      el('label', {}, ['Words to write', el('input', { type: 'number', min: 1, max: 12, value: pg.steps, onchange: (e) => setPlayground({ steps: Math.max(1, Math.min(12, Number(e.target.value) || 1)) }) })]),
-      el('label', {}, [`Creativity (temperature) — ${pg.temperature <= 0 ? 'always the favourite' : pg.temperature < 0.8 ? 'mostly the favourite' : pg.temperature <= 1.2 ? 'roll the dice as the model bets' : 'wild'}`,
-        el('input', { type: 'range', min: 0, max: 2, step: 0.1, value: pg.temperature, oninput: (e) => setPlayground({ temperature: Number(e.target.value) }) })]),
+      el('label', {}, ['Words to write', stepsInput]),
+      el('label', {}, [`Creativity (temperature) — ${pg.temperature <= 0 ? 'always the favourite' : pg.temperature < 0.8 ? 'mostly the favourite' : pg.temperature <= 1.2 ? 'roll the dice as the model bets' : 'wild'}`, tempInput]),
       rerollBtn,
       el('button', { class: 'primary', text: 'Train 25 steps', onclick: (e) => { e.target.disabled = true; e.target.textContent = 'Training…'; setTimeout(() => train(25), 20); } }),
     ]),
@@ -133,6 +145,10 @@ function render() {
   ]);
 
   content.replaceChildren(intro, demo, scale, chapterNav('playground.html'));
+  if (active === prompt || active === tempInput || active === stepsInput) {
+    active.focus({ preventScroll: true });
+    if (sel) prompt.setSelectionRange(sel[0], sel[1]);
+  }
 }
 
-bindRender(render, { quietKeys: ['playground'] });
+bindRender(render);

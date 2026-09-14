@@ -161,6 +161,7 @@ function heatStyle(value, mode, maxAbs) {
     const a = Math.max(0, Math.min(1, value));
     return `--heat: rgba(var(--accent-rgb), ${(a * 0.85).toFixed(3)})`;
   }
+  if (value === 0) return '';
   const a = maxAbs ? Math.min(1, Math.abs(value) / maxAbs) : 0;
   const rgb = value < 0 ? 'var(--neg-rgb)' : 'var(--pos-rgb)';
   return `--heat: rgba(${rgb}, ${(0.08 + a * 0.6).toFixed(3)})`;
@@ -302,7 +303,7 @@ export function showRecalculation(event) {
         void node.offsetWidth; // restart the CSS animation
         node.classList.add('recalc');
       });
-    }, i * delay);
+    }, 16 + i * delay); // 16ms: land after bindRender's deferred re-render
   });
 }
 

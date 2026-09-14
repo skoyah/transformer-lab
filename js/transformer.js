@@ -433,7 +433,7 @@ export function trainStep(state, learningRate) {
   forEachParam(weights, (row, c, name, r) => {
     const g = r >= 0 ? grads[name][r][c] : grads[name][c];
     gradNorm += g * g;
-    row[c] = round(row[c] - learningRate * g, 4);
+    row[c] = round(row[c] - learningRate * g, 6);
   });
   const lossAfter = lossOf({ ...state, weights });
   return { weights, lossBefore, lossAfter, gradNorm: Math.sqrt(gradNorm) };

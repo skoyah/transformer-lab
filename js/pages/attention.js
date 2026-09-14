@@ -1,4 +1,3 @@
-import { forwardAttention } from '../transformer.js';
 import { getExperiment, getDerived, setWeightCell, setCausal } from '../state.js';
 import {
   initPage, bindRender, el, esc, pct, lesson, prose, callout, underHood, figure, op, matrixTable,
@@ -11,7 +10,7 @@ const content = document.getElementById('content');
 function render() {
   const s = getExperiment();
   const d = getDerived();
-  const attn = forwardAttention(s);
+  const attn = { X: d.positionalInput, Q: d.Q, K: d.K, V: d.V, KT: d.KT, scores: d.scores, scaledScores: d.scaledScores, attentionWeights: d.attentionWeights, output: d.attentionOutput };
   const dims = dimLabels(s.config.dim);
   const toks = tokenLabels(d);
   const n = d.tokens.length;

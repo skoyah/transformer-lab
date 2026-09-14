@@ -284,8 +284,10 @@ export function setCurrentStep(page) {
 
 export function train(steps = 1) {
   let last = null;
+  let first = null;
   for (let i = 0; i < steps; i++) {
     last = computeTrainStep(state, state.learningRate);
+    first = first || last;
     state.weights = last.weights;
     state.trainingHistory.push({
       step: state.trainingHistory.length + 1,
@@ -293,7 +295,7 @@ export function train(steps = 1) {
       learningRate: state.learningRate,
     });
   }
-  return commit(TRAINABLE.map((n) => `weights.${n}`), { training: last, steps });
+  return commit(TRAINABLE.map((n) => `weights.${n}`), { training: { ...last, lossBefore: first.lossBefore }, steps });
 }
 
 export function resetExperiment(overrides = {}) {
