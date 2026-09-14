@@ -1,0 +1,81 @@
+import { getExperiment, getDerived, setWeightCell } from '../state.js';
+import {
+  initPage, bindRender, el, esc, lesson, prose, callout, underHood, figure, op, matrixTable,
+  dotExample, chapterNav, tokenLabels, dimLabels,
+} from '../ui.js';
+
+initPage('ffn.html');
+const content = document.getElementById('content');
+
+function render() {
+  const s = getExperiment();
+  const d = getDerived();
+  const dims = dimLabels(s.config.dim);
+  const hid = dimLabels(s.config.hidden, 'h');
+  const toks = tokenLabels(d);
+
+  const residual = lesson('Keep the original, add what you heard', [
+    prose(`<p>After attention, each word holds Z — a blend of other words' notes. But we don't want the word to <em>forget itself</em>. So instead of replacing X with Z, we add them: the word keeps its own row and gets the gathered information on top. This is called a <strong>residual connection</strong>, and it is one of the reasons deep networks are trainable at all.</p>`),
+    callout('idea', `<p>It's editing with track changes rather than retyping the document. The original text stays; attention only has to propose the <em>changes</em>. Small, safe edits are much easier to learn than rewriting everything from scratch.</p>`),
+    figure('residual1', [
+      matrixTable({ title: 'X (input)', matrix: d.positionalInput, rowLabels: toks, colLabels: dims, small: true }),
+      op('+'),
+      matrixTable({ title: 'Z (attention)', matrix: d.attentionOutput, rowLabels: toks, colLabels: dims, small: true }),
+      op('='),
+      matrixTable({ title: 'R₁', matrix: d.residual1, rowLabels: toks, colLabels: dims }),
+    ]),
+  ]);
+
+  const norm = lesson('Normalise the volume', [
+    prose(`<p>Adding things together makes numbers drift: some rows end up loud, others quiet. Before the next step we standardise each row so it has an average of 0 and a typical spread of 1. This is <strong>layer normalisation</strong>. It changes nothing about the <em>direction</em> a row points in — only its scale — and it keeps every later stage working in a comfortable range.</p>`),
+    figure('norm1', [matrixTable({ title: 'N₁ — normalised', matrix: d.norm1, rowLabels: toks, colLabels: dims, note: 'Every row now averages 0 with spread 1.' })]),
+    underHood('N[i] = (R[i] − mean(R[i])) / sqrt(var(R[i]) + ε)', `<p>Done independently for each row. Real models also learn a scale and shift per column; we leave those out to keep the picture clean.</p>`),
+  ]);
+
+  const think = lesson('A moment of private thought', [
+    prose(`<p>Attention moved information <em>between</em> words. Now each word, on its own, gets to process what it has. It goes through a tiny two-layer network — the <strong>feed-forward</strong> block:</p>
+      <ol>
+        <li>expand from ${s.config.dim} numbers to ${s.config.hidden} (W₁, plus a bias b₁) — more room to think;</li>
+        <li>keep only the positive results (<strong>ReLU</strong>) — this is the one genuinely non-linear step, and without it the whole model would collapse into a single multiplication;</li>
+        <li>squeeze back to ${s.config.dim} numbers (W₂, plus b₂).</li>
+      </ol>
+      <p>The same small network is applied to every row separately; the rows don't interact here at all.</p>`),
+    callout('idea', `<p>ReLU is a bouncer that only lets good news through: anything negative becomes 0, anything positive passes unchanged. It sounds crude, but “detect a feature, ignore it if absent” is exactly what a network needs to build up rules.</p>`),
+    el('div', { class: 'card figure' }, [
+      el('div', { class: 'figure-row' }, [
+        matrixTable({ title: 'W₁ — expand', matrix: s.weights.W1, rowLabels: dims, colLabels: hid, editable: true, onEdit: (r, c, v) => setWeightCell('W1', r, c, v) }),
+        matrixTable({ title: 'b₁', matrix: [s.weights.b1], rowLabels: ['bias'], colLabels: hid, editable: true, onEdit: (r, c, v) => setWeightCell('b1', r, c, v) }),
+      ]),
+      el('div', { class: 'figure-row', style: 'margin-top:1rem' }, [
+        matrixTable({ title: 'W₂ — squeeze', matrix: s.weights.W2, rowLabels: hid, colLabels: dims, editable: true, onEdit: (r, c, v) => setWeightCell('W2', r, c, v) }),
+        matrixTable({ title: 'b₂', matrix: [s.weights.b2], rowLabels: ['bias'], colLabels: dims, editable: true, onEdit: (r, c, v) => setWeightCell('b2', r, c, v) }),
+      ]),
+      el('p', { class: 'fig-caption', text: 'The feed-forward weights. In real models this block holds most of the parameters — it is where “knowledge” tends to live.' }),
+    ]),
+    figure('ffnHidden', [matrixTable({ title: 'H — after expand + ReLU', matrix: d.ffnHidden, rowLabels: toks, colLabels: hid, note: 'Zeros are where ReLU said no.' })]),
+    prose(`<p>Before ReLU, the first hidden number of “${esc(d.tokens[0])}” is its normalised row dotted with the first column of W₁, plus the bias:</p>`),
+    dotExample('H[0][0] (pre-ReLU)', d.norm1[0], s.weights.W1.map((r) => r[0]), { aName: 'N₁[0]', bName: 'W₁[:,0]', tail: ` <span class="eq">+ b₁[0]</span> <b>${s.weights.b1[0].toFixed(2)}</b> <span class="eq">→ ReLU →</span> <span class="result">${d.ffnHidden[0][0].toFixed(2)}</span>` }),
+    figure('ffnOutput', [matrixTable({ title: 'F — after squeeze', matrix: d.ffnOutput, rowLabels: toks, colLabels: dims })]),
+  ]);
+
+  const again = lesson('And once more: add, then normalise', [
+    prose(`<p>Same trick as before. The thought F is added onto the row it came from, and the result is normalised. That's the end of one transformer <strong>block</strong>. Big models stack dozens of these; the output of one block is simply the X of the next.</p>`),
+    figure('residual2', [
+      matrixTable({ title: 'N₁', matrix: d.norm1, rowLabels: toks, colLabels: dims, small: true }),
+      op('+'),
+      matrixTable({ title: 'F', matrix: d.ffnOutput, rowLabels: toks, colLabels: dims, small: true }),
+      op('='),
+      matrixTable({ title: 'R₂', matrix: d.residual2, rowLabels: toks, colLabels: dims }),
+    ]),
+    figure('norm2', [matrixTable({ title: 'N₂ — the block\'s output', matrix: d.norm2, rowLabels: toks, colLabels: dims })], 'One final vector per token. Chapter 5 turns these into predictions.'),
+    callout('try', `<ul>
+      <li>Set every value of <strong>b₁</strong> to −5. ReLU now blocks everything, H becomes all zeros, and F collapses to just b₂ for every word.</li>
+      <li>Set <strong>W₂</strong> to all zeros. The block's thought contributes nothing; N₂ becomes a normalised copy of N₁ — the residual path alone carries the signal.</li>
+    </ul>`),
+    callout('key', `<p>A transformer block is two moves, each wrapped in “add to the original and normalise”: <em>attention</em> (words exchange information) and <em>feed-forward</em> (each word processes it alone).</p>`),
+  ]);
+
+  content.replaceChildren(residual, norm, think, again, chapterNav('ffn.html'));
+}
+
+bindRender(render);
