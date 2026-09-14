@@ -1,5 +1,7 @@
 # Transformer Lab
 
+**Read it live:** https://skoyah.github.io/transformer-lab/
+
 One tiny transformer block, every number visible and editable. Vanilla ES modules, no build step.
 
 ```
