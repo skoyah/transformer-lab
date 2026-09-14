@@ -27,7 +27,7 @@ function render() {
   ]);
 
   const norm = lesson('Normalise the volume', [
-    prose(`<p>Adding things together makes numbers drift: some rows end up loud, others quiet. Before the next step we standardise each row so it has an average of 0 and a typical spread of 1. This is <strong>layer normalisation</strong>. It changes nothing about the <em>direction</em> a row points in — only its scale — and it keeps every later stage working in a comfortable range.</p>`),
+    prose(`<p>Adding things together makes numbers drift: some rows end up loud, others quiet. Before the next step we standardise each row so it has an average of 0 and a typical spread of 1. This is <strong>layer normalisation</strong>. It removes each row's average and rescales its spread, which keeps every later stage working in a comfortable range.</p>`),
     figure('norm1', [matrixTable({ title: 'N₁ — normalised', matrix: d.norm1, rowLabels: toks, colLabels: dims, note: 'Every row now averages 0 with spread 1.' })]),
     underHood('N[i] = (R[i] − mean(R[i])) / sqrt(var(R[i]) + ε)', `<p>Done independently for each row. Real models also learn a scale and shift per column; we leave those out to keep the picture clean.</p>`),
   ]);
@@ -36,7 +36,7 @@ function render() {
     prose(`<p>Attention moved information <em>between</em> words. Now each word, on its own, gets to process what it has. It goes through a tiny two-layer network — the <strong>feed-forward</strong> block:</p>
       <ol>
         <li>expand from ${s.config.dim} numbers to ${s.config.hidden} (W₁, plus a bias b₁) — more room to think;</li>
-        <li>keep only the positive results (<strong>ReLU</strong>) — this is the one genuinely non-linear step, and without it the whole model would collapse into a single multiplication;</li>
+        <li>keep only the positive results (<strong>ReLU</strong>) — the only non-linear step inside this block; without it the two layers would collapse into one multiplication;</li>
         <li>squeeze back to ${s.config.dim} numbers (W₂, plus b₂).</li>
       </ol>
       <p>The same small network is applied to every row separately; the rows don't interact here at all.</p>`),

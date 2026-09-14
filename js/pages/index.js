@@ -40,7 +40,7 @@ function heroPanel() {
     ]),
     el('div', { class: 'card' }, [
       el('h3', { style: 'margin-top:0', text: 'Right now the model thinks…' }),
-      prose(`<p>…that after <strong>“${esc(d.tokens[last])}”</strong> the next word is <strong>“${esc(pred.token)}”</strong> (${pct(pred.prob)} sure).${s.trainingHistory.length ? '' : ' It has never been trained, so this is a random guess — by Chapter 5 you will fix that.'}</p>`),
+      prose(`<p>…that after <strong>“${esc(d.tokens[last])}”</strong> the next word is <strong>“${esc(pred.token)}”</strong> (${pct(pred.prob)} sure).${s.trainingHistory.length ? '' : ' It has never been trained, so this is no better than a random guess — by Chapter 5 you will fix that.'}</p>`),
       el('p', { style: 'margin:0' }, [
         el('a', { href: s.currentStep && s.currentStep !== 'index.html' ? s.currentStep : 'tokens.html', class: 'primary' }, [
           el('button', { class: 'primary', text: s.currentStep && s.currentStep !== 'index.html' ? 'Continue reading →' : 'Start with Chapter 1 →' }),

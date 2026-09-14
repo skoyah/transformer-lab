@@ -76,7 +76,7 @@ function render() {
   } });
 
   const learning = lesson('Teach it to bet better', [
-    prose(`<p>How wrong is the model? We measure its <strong>surprise</strong>: for each position, how little probability it gave to the word that actually came next. Give the right word 100% and surprise is 0; give it 1% and surprise is large. Averaged over the text, that single number is what training tries to push down. (Its formal name is cross-entropy loss.)</p>
+    prose(`<p>How wrong is the model? We measure its <strong>surprise</strong>: for each position, take the probability it gave to the word that actually came next and ask “how unlikely did it think that was?” Give the right word 100% and surprise is 0; 50% is 0.69; 10% is 2.3; 1% is 4.6. (It's −log of the probability.) Averaged over the text, that single number is what training tries to push down. (Its formal name is cross-entropy loss.)</p>
       <p>Training is remarkably unglamorous. For every one of the ${['embedding', 'positional', 'Wq', 'Wk', 'Wv', 'W1', 'W2', 'Wout'].reduce((acc, k) => acc + s.weights[k].flat().length, 0) + s.weights.b1.length + s.weights.b2.length} numbers in the weight tables, ask “if I nudged this up a hair, would surprise go up or down?” — then move it a small step the helpful way. The size of that step is the <strong>learning rate</strong>. Repeat.</p>`),
     callout('idea', `<p>It's tuning an instrument with ${s.config.dim * s.config.dim * 3}+ pegs at once, by ear: turn each peg a fraction, keep it if the chord sounds better. Real models compute all the nudges in one clever pass (backpropagation); here we honestly try each one, which is fine when the model is tiny.</p>`),
     el('div', { class: 'card' }, [
