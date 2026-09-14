@@ -23,6 +23,10 @@ export function matmulScene({
   const colOf = (j) => (bByRow ? B[j] : B.map((r) => r[j]));
   return {
     total: n * m,
+    hover: (i, j) => ({
+      sources: [{ table: 0, row: i }, bByRow ? { table: 1, row: j } : { table: 1, col: j }],
+      worked: dotExample(`${cTitle}[${i}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${i}]`, bName: `${bTitle}[${bByRow ? j : ':,' + j}]`, tail: tail ? tail(i, j) : '' }),
+    }),
     frame(k) {
       const idx = Math.min(k, n * m) - 1;
       const i = k ? Math.floor(idx / m) : null;
@@ -50,6 +54,10 @@ export function rowScene({ inputs, ops = [], output, idle, explain, done, extra 
   const n = output.matrix.length;
   return {
     total: n,
+    hover: (i) => {
+      const ex = explain(i);
+      return { sources: inputs.map((_, t) => ({ table: t, row: i })), worked: ex.worked ? worked(ex.worked) : null };
+    },
     frame(k) {
       const i = k ? Math.min(k, n) - 1 : null;
       const parts = [];
@@ -72,6 +80,7 @@ export function lookupScene({ table, ids, tokens, output, idle, explain, done })
   const n = ids.length;
   return {
     total: n,
+    hover: (i) => ({ sources: [{ table: 0, row: ids[i] }], worked: worked(`<span class="lhs">row ${i}</span><span class="eq">=</span> ${esc(table.title)}[${ids[i]}] — “${esc(tokens[i])}”`) }),
     frame(k) {
       const i = k ? Math.min(k, n) - 1 : null;
       const body = row([
@@ -142,6 +151,7 @@ export function transposeScene({ K, KT, tokens, dims, idle }) {
   const n = K.length;
   return {
     total: n,
+    hover: (r, c) => ({ sources: [{ table: 0, row: c, col: r }], worked: worked(`<span class="lhs">Kᵀ[${r}][${c}]</span><span class="eq">=</span> K[${c}][${r}] <span class="eq">=</span> <span class="result">${fmt(K[c][r])}</span>`) }),
     frame(k) {
       const i = k ? k - 1 : null;
       const body = row([

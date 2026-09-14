@@ -73,6 +73,52 @@ function renderInto(root, id) {
     p.animateNext = false;
     setTimeout(() => animateStep(root, speedMs()), 0);
   }
+  bindHover(root, p);
+}
+
+// Hover a computed cell: its source row/column light up and its arithmetic
+// appears, whatever step the player is on.
+function bindHover(root, p) {
+  if (!p.scene.hover) return;
+  const tables = [...root.querySelectorAll('.player-stage table.matrix')];
+  if (tables.length < 2) return;
+  const target = tables[tables.length - 1];
+  const sources = tables.slice(0, -1);
+  let tip = null;
+  const clear = () => {
+    root.querySelectorAll('.hov, .hov-cell').forEach((n) => n.classList.remove('hov', 'hov-cell'));
+    if (tip) { tip.remove(); tip = null; }
+  };
+  target.querySelectorAll('td[data-r]').forEach((td) => {
+    if (td.classList.contains('blank')) return;
+    td.addEventListener('mouseenter', () => {
+      clear();
+      const r = Number(td.dataset.r);
+      const c = Number(td.dataset.c);
+      const info = p.scene.hover(r, c);
+      if (!info) return;
+      td.classList.add('hov-cell');
+      for (const src of info.sources || []) {
+        const t = sources[src.table];
+        if (!t) continue;
+        t.querySelectorAll('td[data-r]').forEach((cell) => {
+          const okRow = src.row == null || Number(cell.dataset.r) === src.row;
+          const okCol = src.col == null || Number(cell.dataset.c) === src.col;
+          if (okRow && okCol) cell.classList.add('hov');
+        });
+      }
+      if (info.worked) {
+        tip = el('div', { class: 'hover-tip' }, info.worked);
+        root.append(tip);
+        const rr = root.getBoundingClientRect();
+        const cr = td.getBoundingClientRect();
+        tip.style.top = `${cr.bottom - rr.top + 6}px`;
+        const left = Math.max(8, Math.min(cr.left - rr.left, rr.width - tip.offsetWidth - 8));
+        tip.style.left = `${left}px`;
+      }
+    });
+    td.addEventListener('mouseleave', clear);
+  });
 }
 
 // ---------------------------------------------------------------------------

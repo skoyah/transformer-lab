@@ -348,3 +348,9 @@ svg.arcs[data-hover] .arc { opacity: .06 !important; }
 svg.arcs[data-hover="0"] .arc.from-0, svg.arcs[data-hover="1"] .arc.from-1, svg.arcs[data-hover="2"] .arc.from-2, svg.arcs[data-hover="3"] .arc.from-3, svg.arcs[data-hover="4"] .arc.from-4, svg.arcs[data-hover="5"] .arc.from-5, svg.arcs[data-hover="6"] .arc.from-6, svg.arcs[data-hover="7"] .arc.from-7, svg.arcs[data-hover="8"] .arc.from-8, svg.arcs[data-hover="9"] .arc.from-9, svg.arcs[data-hover="10"] .arc.from-10, svg.arcs[data-hover="11"] .arc.from-11, svg.arcs[data-hover="12"] .arc.from-12, svg.arcs[data-hover="13"] .arc.from-13, svg.arcs[data-hover="14"] .arc.from-14, svg.arcs[data-hover="15"] .arc.from-15 { opacity: 1 !important; stroke: var(--accent); }
 .arcs-wrap { width: 100%; margin-top: .6rem; }
 .arcs-wrap .fig-caption { margin-top: .2rem; }
+
+/* ---------- hover linking ---------- */
+table.matrix td.hov { box-shadow: inset 0 0 0 2px var(--warm); }
+table.matrix td.hov-cell { box-shadow: inset 0 0 0 2px var(--warm); cursor: help; }
+.hover-tip { position: absolute; z-index: 4; max-width: min(90%, 640px); pointer-events: none; }
+.hover-tip .worked { box-shadow: 0 8px 24px rgba(0,0,0,.18); border: 1px solid var(--line-strong); background: var(--paper); }
