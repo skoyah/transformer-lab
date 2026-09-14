@@ -333,3 +333,5 @@ table.matrix td.pulse { animation: cellpop .55s cubic-bezier(.2,.9,.3,1.2); }
 .chip-link:hover { background: var(--amber); color: #fff; }
 table.pred tr.hlrow td { background: var(--accent-soft); }
 .toc li.played .idx { color: var(--accent); }
+.ghost-cell { position: absolute; z-index: 3; pointer-events: none; display: flex; align-items: center; justify-content: flex-end; padding: 0 .45rem; border-radius: 5px; font-family: var(--mono); box-shadow: 0 2px 8px rgba(0,0,0,.18); color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { table.matrix td.pulse, .chip.pulse { animation: none; } }

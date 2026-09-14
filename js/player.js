@@ -69,6 +69,77 @@ function renderInto(root, id) {
     ]),
     toolbar(id),
   );
+  if (p.animateNext) {
+    p.animateNext = false;
+    setTimeout(() => animateStep(root, speedMs()), 0);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step animation: the highlighted source cells fly into the cell(s) they
+// produce. Works from the rendered DOM alone, so every scene gets it:
+//   • a single highlighted target cell  ← every highlighted row/column cell
+//   • a highlighted target row          ← same column of each highlighted input row
+//   • a highlighted target column       ← input row, cell c landing on row c
+// ---------------------------------------------------------------------------
+
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function animateStep(root, stepMs) {
+  if (reducedMotion()) return;
+  const stage = root.querySelector('.player-stage');
+  const tables = [...stage.querySelectorAll('table.matrix')];
+  if (tables.length < 2) return;
+  const target = tables[tables.length - 1];
+  const sources = tables.slice(0, -1);
+  const pairs = []; // [sourceTd, targetTd]
+  const cell = target.querySelector('td.hlcell');
+  if (cell) {
+    for (const t of sources) for (const td of t.querySelectorAll('td.hlrow, td.hlcol')) pairs.push([td, cell]);
+  } else if (target.querySelector('td.hlrow')) {
+    const row = [...target.querySelectorAll('td.hlrow')];
+    for (const t of sources) for (const td of t.querySelectorAll('td.hlrow')) {
+      const to = row.find((x) => x.dataset.c === td.dataset.c);
+      if (to) pairs.push([td, to]);
+    }
+  } else if (target.querySelector('td.hlcol')) {
+    const col = [...target.querySelectorAll('td.hlcol')];
+    for (const t of sources) for (const td of t.querySelectorAll('td.hlrow')) {
+      const to = col.find((x) => x.dataset.r === td.dataset.c);
+      if (to) pairs.push([td, to]);
+    }
+  }
+  if (!pairs.length) return;
+
+  const rootRect = root.getBoundingClientRect();
+  const duration = Math.max(260, Math.min(700, stepMs * 0.38));
+  const stagger = Math.min(60, (stepMs * 0.25) / pairs.length);
+  const targets = new Set(pairs.map(([, to]) => to));
+  for (const to of targets) { to.classList.remove('pulse'); to.style.visibility = 'hidden'; }
+  root.style.position = 'relative';
+  const ghosts = [];
+  pairs.forEach(([from, to], i) => {
+    const a = from.getBoundingClientRect();
+    const b = to.getBoundingClientRect();
+    const ghost = el('div', { class: 'ghost-cell', text: from.textContent });
+    const cs = getComputedStyle(from);
+    ghost.style.cssText = `left:${a.left - rootRect.left}px; top:${a.top - rootRect.top}px; width:${a.width}px; height:${a.height}px; background:${cs.backgroundColor}; font-size:${cs.fontSize}`;
+    root.append(ghost);
+    ghosts.push(ghost);
+    ghost.animate([
+      { transform: 'translate(0,0) scale(1)', opacity: 1 },
+      { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(.8)`, opacity: 0.15 },
+    ], { duration, delay: i * stagger, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+  });
+  setTimeout(() => {
+    for (const g of ghosts) g.remove();
+    for (const to of targets) {
+      if (!to.isConnected) continue;
+      to.style.visibility = '';
+      void to.offsetWidth;
+      to.classList.add('pulse');
+    }
+  }, duration + stagger * (pairs.length - 1));
 }
 
 function refresh(id) {
@@ -106,7 +177,7 @@ function toolbar(id) {
     btn('end', 'Skip to the end', () => { pause(id); setStep(id, p.total); }, atEnd),
     el('span', { class: 'counter', text: `${p.step} / ${p.total}` }),
     scrub,
-    el('select', { class: 'speed', 'aria-label': 'Speed', onchange: (e) => setAnimation({ speed: e.target.value }) },
+    el('select', { class: 'speed', 'aria-label': 'Speed', onchange: (e) => { setAnimation({ speed: e.target.value }); for (const other of players.keys()) refresh(other); } },
       Object.keys(SPEEDS).map((k) => el('option', { value: k, text: k, selected: k === speed }))),
   ]);
 }
@@ -114,7 +185,9 @@ function toolbar(id) {
 export function setStep(id, step) {
   const p = players.get(id);
   if (!p) return;
-  p.step = Math.max(0, Math.min(p.total, step));
+  const next = Math.max(0, Math.min(p.total, step));
+  p.animateNext = next === p.step + 1;
+  p.step = next;
   if (p.track && p.step === p.total && getExperiment().progress[id] !== 'done') setProgress(id, 'done');
   refresh(id);
 }
