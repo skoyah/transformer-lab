@@ -316,3 +316,48 @@ export function chapterControls(ids) {
     el('span', { class: 'fig-caption', style: 'margin:0', text: `${done} of ${ids.length} stages played` }),
   ]);
 }
+
+// ---------------------------------------------------------------------------
+// Group controls: one toolbar drives several players in lockstep (used for
+// the fresh-vs-trained comparison).
+// ---------------------------------------------------------------------------
+
+const groups = new Map(); // key -> { playing, timer }
+
+export function groupControls(ids, { label = 'Play both together' } = {}) {
+  const key = ids.join('+');
+  if (!groups.has(key)) groups.set(key, { playing: false, timer: null });
+  const g = groups.get(key);
+  const live = () => ids.map((id) => players.get(id)).filter(Boolean);
+  const maxTotal = () => Math.max(0, ...live().map((p) => p.total));
+  const allAtEnd = () => live().every((p) => p.step >= p.total);
+  const allAtStart = () => live().every((p) => p.step === 0);
+  const rerender = () => { const bar = document.querySelector(`[data-group="${CSS.escape(key)}"]`); if (bar) bar.replaceWith(groupControls(ids, { label })); };
+  const stepAll = (delta) => { for (const p of live()) setStep(idOf(p), p.step + delta); rerender(); };
+  const idOf = (p) => ids.find((id) => players.get(id) === p);
+  const stop = () => { g.playing = false; clearTimeout(g.timer); rerender(); };
+  const start = () => {
+    pauseAll();
+    if (allAtEnd()) for (const p of live()) setStep(idOf(p), 0);
+    g.playing = true;
+    rerender();
+    const tick = () => {
+      if (!g.playing) return;
+      stepAll(1);
+      if (allAtEnd()) { g.playing = false; rerender(); return; }
+      g.timer = setTimeout(tick, speedMs());
+    };
+    g.timer = setTimeout(tick, speedMs() * 0.6);
+  };
+  const btn = (name, title, onclick, disabled = false) => el('button', { class: 'pbtn', title, 'aria-label': title, html: icon(name), onclick, disabled });
+  const steps = live().map((p) => p.step);
+  return el('div', { class: 'player-bar group-bar', dataset: { group: key } }, [
+    el('span', { class: 'group-label', text: label }),
+    btn('start', 'Both back to start', () => { stop(); for (const p of live()) setStep(idOf(p), 0); rerender(); }, allAtStart()),
+    btn('prev', 'Both one step back', () => { stop(); stepAll(-1); }, allAtStart()),
+    g.playing ? btn('pause', 'Pause', stop) : btn('play', allAtEnd() ? 'Play both again' : 'Play both', start),
+    btn('next', 'Both one step forward', () => { stop(); stepAll(1); }, allAtEnd()),
+    btn('end', 'Both to the end', () => { stop(); for (const p of live()) setStep(idOf(p), p.total); rerender(); }, allAtEnd()),
+    el('span', { class: 'counter', text: `${Math.min(...steps, maxTotal())} / ${maxTotal()}` }),
+  ]);
+}

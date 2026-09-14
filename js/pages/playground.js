@@ -1,7 +1,7 @@
 import { tokenize, forwardIds, generate, topK, lossOf } from '../transformer.js';
 import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, train } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs } from '../ui.js';
-import { player } from '../player.js';
+import { player, groupControls } from '../player.js';
 import { worked } from '../scenes.js';
 
 initPage('playground.html');
@@ -122,9 +122,14 @@ function render() {
     ]),
   ]);
 
-  const compare = el('div', { class: 'compare' }, [
+  // Cards first: they create the players the group bar drives.
+  const cards = el('div', { class: 'compare' }, [
     modelCard('Fresh model', `same seed, never trained · surprise on your text ${fmt(lossFresh, 2)}`, fresh, ids, pg, 'fresh'),
     modelCard('Your model', `${steps} training step${steps === 1 ? '' : 's'}${steps ? '' : ' (edits only)'} · surprise ${fmt(lossNow, 2)}`, s, ids, pg, 'yours'),
+  ]);
+  const compare = el('div', { class: 'stack' }, [
+    el('div', { class: 'card flush' }, groupControls(['gen-fresh', 'gen-yours'], { label: 'Both models, in step' })),
+    cards,
   ]);
 
   const demo = lesson('Fresh vs. trained', [

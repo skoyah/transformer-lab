@@ -354,3 +354,5 @@ table.matrix td.hov { box-shadow: inset 0 0 0 2px var(--warm); }
 table.matrix td.hov-cell { box-shadow: inset 0 0 0 2px var(--warm); cursor: help; }
 .hover-tip { position: absolute; z-index: 4; max-width: min(90%, 640px); pointer-events: none; }
 .hover-tip .worked { box-shadow: 0 8px 24px rgba(0,0,0,.18); border: 1px solid var(--line-strong); background: var(--paper); }
+.group-bar { margin-top: 0; padding-top: 0; border-top: 0; }
+.group-label { font: 600 13px/1 var(--sans); color: var(--ink-soft); margin-right: .4rem; }
