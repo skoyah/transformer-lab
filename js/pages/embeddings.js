@@ -25,7 +25,7 @@ function render() {
         title: 'Embedding table E', matrix: s.weights.embedding, rowLabels: s.vocab.map((w, i) => `${i} ${w}`), colLabels: dims,
         editable: true, highlightRows: used, cornerLabel: 'id', onEdit: (r, c, v) => setWeightCell('embedding', r, c, v),
       }),
-      el('p', { class: 'fig-caption', text: 'One row per dictionary word. Blue is negative, orange positive; stronger colour, bigger number. Highlighted rows are used by your text. Click any number to change it — it is saved, and the stages after it go back to waiting for play.' }),
+      el('p', { class: 'fig-caption', text: 'One row per dictionary word. Blue is negative, orange positive; stronger colour, bigger number. Highlighted rows are used by your text. Click any number to change it — it is saved, and the stages after it go back to waiting for play. Keyboard: ↑/↓ nudge by 0.1 (Shift ±1, Alt ±0.01), ←/→ move between cells, Enter saves and moves down, Esc reverts.' }),
     ]),
   ]);
 

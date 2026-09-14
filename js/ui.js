@@ -215,6 +215,7 @@ export function matrixTable(opts) {
             onEdit && onEdit(r, c, parsed);
           },
           onfocus: (e) => e.target.select(),
+          onkeydown: (e) => matrixKeys(e, r, c, v, decimals, onEdit),
         }));
       } else {
         td.textContent = fmt(v, decimals);
@@ -234,6 +235,38 @@ export function matrixTable(opts) {
   wrap.append(el('div', { class: 'scroll' }, table));
   if (note) wrap.append(el('p', { class: 'note', text: note }));
   return wrap;
+}
+
+// Keyboard editing: ↑/↓ nudge by 0.1 (Shift: 1, Alt: 0.01) and save at once;
+// ←/→ at the edge of the text move to the neighbouring cell; Enter saves and
+// moves down; Escape reverts.
+function matrixKeys(e, r, c, original, decimals, onEdit) {
+  const input = e.target;
+  const table = input.closest('table');
+  const go = (dr, dc) => {
+    const next = table.querySelector(`td[data-r="${r + dr}"][data-c="${c + dc}"] input`);
+    if (next) { e.preventDefault(); next.focus(); }
+  };
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    const step = e.shiftKey ? 1 : e.altKey ? 0.01 : 0.1;
+    const current = Number(input.value.replace(',', '.'));
+    const base = Number.isFinite(current) ? current : original;
+    const next = Math.round((base + (e.key === 'ArrowUp' ? step : -step)) * 1000) / 1000;
+    input.value = fmt(next, Math.max(decimals, step < 0.1 ? 3 : 2));
+    onEdit && onEdit(r, c, next);
+  } else if (e.key === 'ArrowLeft' && input.selectionStart === 0) {
+    go(0, -1);
+  } else if (e.key === 'ArrowRight' && input.selectionEnd === input.value.length) {
+    go(0, 1);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    input.dispatchEvent(new Event('change'));
+    go(1, 0);
+  } else if (e.key === 'Escape') {
+    input.value = fmt(original, decimals);
+    input.blur();
+  }
 }
 
 export function tokenLabels(derived) {
