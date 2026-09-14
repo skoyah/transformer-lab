@@ -405,3 +405,15 @@ table.matrix td.masked::after {
 table.matrix tr.hlrow td.masked::after { animation: curtain .5s cubic-bezier(.4,0,.2,1) both; animation-delay: calc(320ms + var(--c) * 55ms); }
 @keyframes curtain { from { transform: translateX(105%); } to { transform: translateX(0); } }
 @media (prefers-reduced-motion: reduce) { table.matrix tr.hlrow td.masked::after { animation: none; } }
+
+/* ---------- tokenizer animations ---------- */
+.sentence-scan { position: relative; }
+.sentence-scan .cur .ch { display: inline-block; animation: readch .35s ease-out both; }
+@keyframes readch { 0% { color: var(--muted); transform: translateY(0); } 40% { color: var(--accent); transform: translateY(-4px); } 100% { color: var(--accent); transform: translateY(0); } }
+.sentence-scan .cur .ch.lowercased { animation-name: readch-lc; }
+@keyframes readch-lc { 0% { color: var(--muted); transform: translateY(0) rotateX(0); } 50% { color: var(--warm); transform: translateY(-4px) rotateX(90deg); } 100% { color: var(--accent); transform: translateY(0) rotateX(0); } }
+.ghost-fly { position: absolute; z-index: 5; pointer-events: none; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.ghost-fly.chip-ghost { font-family: var(--serif); font-size: 1.05rem; background: var(--paper); border: 1px solid var(--accent); border-radius: 10px; padding: .35rem .75rem; color: var(--ink); }
+.ghost-fly.word-ghost { background: var(--accent-soft); border-radius: 6px; padding: 0 .4rem; color: var(--accent); font-family: var(--serif); }
+.ghost-fly.ticket-ghost { background: var(--accent); color: #fff; border-radius: 6px; padding: 0 .45rem; font-family: var(--mono); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .sentence-scan .cur .ch { animation: none; color: var(--accent); } }

@@ -76,9 +76,36 @@ function renderInto(root, id) {
   p.animateNext = false;
   setTimeout(() => {
     moveHighlights(root, overlay);
-    if (animate) animateStep(root, speedMs());
+    if (animate) {
+      animateStep(root, speedMs());
+      if (frame.animate) frame.animate(root, speedMs());
+    }
   }, 0);
   bindHover(root, p);
+}
+
+// Helper for scene-specific animations: a ghost copy of `from` flies to `to`.
+export function flyGhost(root, from, to, { duration = 450, text = null, onLand = null, hideTarget = true, className = '' } = {}) {
+  if (reducedMotion() || !from || !to) { onLand && onLand(); return; }
+  const rr = root.getBoundingClientRect();
+  const a = from.getBoundingClientRect();
+  const b = to.getBoundingClientRect();
+  const ghost = el('div', { class: `ghost-fly ${className}`, text: text ?? from.textContent });
+  const cs = getComputedStyle(from);
+  ghost.style.cssText = `left:${a.left - rr.left}px; top:${a.top - rr.top}px; min-width:${a.width}px; height:${a.height}px; font:${cs.font}; color:${cs.color}; background:${cs.backgroundColor}; border-radius:${cs.borderRadius}; padding:${cs.padding}; box-sizing:border-box`;
+  root.style.position = 'relative';
+  root.append(ghost);
+  if (hideTarget) to.style.visibility = 'hidden';
+  const anim = ghost.animate([
+    { transform: 'translate(0,0)', opacity: 1 },
+    { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px)`, opacity: 0.9 },
+  ], { duration, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+  anim.onfinish = () => {
+    ghost.remove();
+    if (to.isConnected) { to.style.visibility = ''; to.classList.remove('pulse'); void to.offsetWidth; to.classList.add('pulse'); }
+    onLand && onLand();
+  };
+  return ghost;
 }
 
 // ---------------------------------------------------------------------------
