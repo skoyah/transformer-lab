@@ -292,6 +292,9 @@ input[type=range] { width: 12rem; accent-color: var(--accent); }
 .card.player { padding: 1rem 1.1rem .7rem; }
 .player-stage { min-height: 3rem; }
 .player-caption { margin-top: .9rem; font-family: var(--sans); font-size: 14px; color: var(--ink-soft); line-height: 1.5; min-height: 1.5rem; }
+.player-caption.fresh { animation: fadeup .4s ease-out both; }
+@keyframes fadeup { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .player-caption.fresh { animation: none; } }
 .player-caption .caption-text { max-width: 60rem; }
 .player-caption .worked { margin-top: .5rem; }
 .player.idle .player-caption .caption-text { color: var(--muted); }
@@ -310,9 +313,14 @@ input[type=range] { width: 12rem; accent-color: var(--accent); }
 .player.idle .player-stage { opacity: .9; }
 
 table.matrix td.blank { color: var(--line-strong); background: transparent; box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
-table.matrix th.hl, table.matrix tr.hlrow th { color: var(--accent); font-weight: 700; }
-table.matrix td.hlrow, table.matrix td.hlcol { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
-table.matrix td.hlcell { box-shadow: inset 0 0 0 2px var(--accent); }
+table.matrix th.hl, table.matrix tr.hlrow th { color: var(--accent); font-weight: 700; transition: color .3s; }
+/* row/column/cell highlights are drawn by the sliding .hl-box overlay (player.js) */
+.hl-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.hl-box { position: absolute; border-radius: 7px; box-sizing: border-box; border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 7%, transparent);
+  transition: left .45s cubic-bezier(.4,0,.2,1), top .45s cubic-bezier(.4,0,.2,1), width .45s cubic-bezier(.4,0,.2,1), height .45s cubic-bezier(.4,0,.2,1), opacity .25s; }
+.hl-box.target { border-color: var(--accent); background: transparent; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.hl-box.off { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .hl-box { transition: none; } }
 table.matrix td.pulse { animation: cellpop .55s cubic-bezier(.2,.9,.3,1.2); }
 @keyframes cellpop { 0% { transform: scale(.6); background: var(--hl); } 100% { transform: scale(1); } }
 .chip.pulse { animation: cellpop .55s cubic-bezier(.2,.9,.3,1.2); border-color: var(--accent); }
@@ -333,14 +341,16 @@ table.matrix td.pulse { animation: cellpop .55s cubic-bezier(.2,.9,.3,1.2); }
 .chip-link:hover { background: var(--amber); color: #fff; }
 table.pred tr.hlrow td { background: var(--accent-soft); }
 .toc li.played .idx { color: var(--accent); }
-.ghost-cell { position: absolute; z-index: 3; pointer-events: none; display: flex; align-items: center; justify-content: flex-end; padding: 0 .45rem; border-radius: 5px; font-family: var(--mono); box-shadow: 0 2px 8px rgba(0,0,0,.18); color: var(--ink); }
+.ghost-cell { position: absolute; z-index: 5; pointer-events: none; display: flex; align-items: center; justify-content: flex-end; padding: 0 .45rem; border-radius: 5px; font-family: var(--mono); box-shadow: 0 2px 8px rgba(0,0,0,.18); color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { table.matrix td.pulse, .chip.pulse { animation: none; } }
 
 /* ---------- attention arcs ---------- */
 svg.arcs { width: 100%; height: auto; display: block; color: var(--accent); overflow: visible; }
 svg.arcs .base { stroke: var(--line-strong); stroke-width: 1; }
 svg.arcs .arc { fill: none; stroke: var(--muted); transition: opacity .2s; }
-svg.arcs .arc.focus { stroke: var(--accent); }
+svg.arcs .arc.focus { stroke: var(--accent); stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawarc .7s ease-out forwards; }
+@keyframes drawarc { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { svg.arcs .arc.focus { animation: none; stroke-dashoffset: 0; } }
 svg.arcs .word text { fill: var(--ink); font-family: var(--serif); cursor: default; }
 svg.arcs .word .idx { fill: var(--muted); font-family: var(--mono); }
 svg.arcs .word.focus text { fill: var(--accent); font-weight: 600; }

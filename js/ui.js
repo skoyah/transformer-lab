@@ -411,13 +411,14 @@ export function attentionArcs({ tokens, rows, focus = null, minShare = 0.03 }) {
     weights.forEach((share, j) => {
       if (share < minShare) return;
       const cls = `arc from-${i}${i === focus ? ' focus' : ''}`;
+      const len = { pathLength: 1 };
       const width = (0.8 + 7 * share).toFixed(2);
       const opacity = (0.18 + 0.82 * share).toFixed(2);
       if (i === j) {
-        add('path', { d: `M${x(i) - 6},${y - 4} C${x(i) - 22},${y - 34} ${x(i) + 22},${y - 34} ${x(i) + 6},${y - 4}`, class: cls, 'stroke-width': width, opacity, 'marker-end': 'url(#arc-head)' });
+        add('path', { d: `M${x(i) - 6},${y - 4} C${x(i) - 22},${y - 34} ${x(i) + 22},${y - 34} ${x(i) + 6},${y - 4}`, class: cls, 'stroke-width': width, opacity, 'marker-end': 'url(#arc-head)', ...len });
       } else {
         const lift = Math.min((y - 10) * 2, 30 + Math.abs(i - j) * gap * 0.7);
-        add('path', { d: `M${x(i)},${y - 6} Q${(x(i) + x(j)) / 2},${y - lift} ${x(j)},${y - 6}`, class: cls, 'stroke-width': width, opacity, 'marker-end': 'url(#arc-head)' });
+        add('path', { d: `M${x(i)},${y - 6} Q${(x(i) + x(j)) / 2},${y - lift} ${x(j)},${y - 6}`, class: cls, 'stroke-width': width, opacity, 'marker-end': 'url(#arc-head)', ...len });
       }
     });
   }

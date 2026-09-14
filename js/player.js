@@ -61,19 +61,83 @@ function renderInto(root, id) {
   root.classList.toggle('idle', p.step === 0);
   root.classList.toggle('done', p.step === p.total);
   root.classList.toggle('playing', p.playing);
+  const overlay = root.querySelector(':scope > .hl-layer') || el('div', { class: 'hl-layer' });
   root.replaceChildren(
     el('div', { class: 'player-stage' }, frame.body),
-    el('div', { class: 'player-caption' }, [
+    el('div', { class: 'player-caption fresh' }, [
       el('div', { class: 'caption-text', html: frame.caption || '' }),
       frame.worked || null,
     ]),
     toolbar(id),
+    overlay,
   );
-  if (p.animateNext) {
-    p.animateNext = false;
-    setTimeout(() => animateStep(root, speedMs()), 0);
-  }
+  root.style.position = 'relative';
+  const animate = p.animateNext;
+  p.animateNext = false;
+  setTimeout(() => {
+    moveHighlights(root, overlay);
+    if (animate) animateStep(root, speedMs());
+  }, 0);
   bindHover(root, p);
+}
+
+// ---------------------------------------------------------------------------
+// Sliding highlights: one persistent box per role (row of table t, column of
+// table t, target cell) that transitions to its new place each step instead
+// of being redrawn — the "cursor" glides from cell to cell.
+// ---------------------------------------------------------------------------
+
+function unionRect(cells) {
+  let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+  for (const c of cells) {
+    const q = c.getBoundingClientRect();
+    l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+  }
+  return { left: l, top: t, width: r - l, height: b - t };
+}
+
+function moveHighlights(root, overlay) {
+  const rootRect = root.getBoundingClientRect();
+  const wanted = new Map(); // name -> { rect, kind }
+  root.querySelectorAll('.player-stage table.matrix').forEach((table, t) => {
+    const rows = [...table.querySelectorAll('td.hlrow')];
+    const cols = [...table.querySelectorAll('td.hlcol')];
+    const cell = table.querySelector('td.hlcell');
+    if (rows.length) wanted.set(`row-${t}`, { rect: unionRect(rows), kind: 'src' });
+    if (cols.length) wanted.set(`col-${t}`, { rect: unionRect(cols), kind: 'src' });
+    if (cell) wanted.set(`cell-${t}`, { rect: unionRect([cell]), kind: 'target' });
+  });
+  for (const box of overlay.children) if (!wanted.has(box.dataset.name)) box.classList.add('off');
+  for (const [name, { rect, kind }] of wanted) {
+    let box = overlay.querySelector(`[data-name="${name}"]`);
+    const fresh = !box;
+    if (fresh) { box = el('div', { class: `hl-box ${kind}`, dataset: { name } }); overlay.append(box); }
+    const place = () => {
+      box.style.left = `${rect.left - rootRect.left - 2}px`;
+      box.style.top = `${rect.top - rootRect.top - 2}px`;
+      box.style.width = `${rect.width + 4}px`;
+      box.style.height = `${rect.height + 4}px`;
+    };
+    if (fresh) { box.classList.add('off'); place(); void box.offsetWidth; }
+    box.classList.remove('off');
+    place();
+  }
+}
+
+// Numbers count up from 0 to their value as they land.
+function countUp(td, ms) {
+  const finalText = td.textContent;
+  const value = Number(finalText.replace('−', '-'));
+  if (!Number.isFinite(value) || reducedMotion()) return;
+  const decimals = (finalText.split('.')[1] || '').length;
+  const start = performance.now();
+  const tick = (now) => {
+    const t = Math.min(1, (now - start) / ms);
+    const eased = 1 - (1 - t) ** 3;
+    td.textContent = (value * eased).toFixed(decimals);
+    if (t < 1 && td.isConnected) requestAnimationFrame(tick); else td.textContent = finalText;
+  };
+  requestAnimationFrame(tick);
 }
 
 // Hover a computed cell: its source row/column light up and its arithmetic
@@ -184,6 +248,7 @@ function animateStep(root, stepMs) {
       to.style.visibility = '';
       void to.offsetWidth;
       to.classList.add('pulse');
+      countUp(to, Math.max(220, stepMs * 0.3));
     }
   }, duration + stagger * (pairs.length - 1));
 }
