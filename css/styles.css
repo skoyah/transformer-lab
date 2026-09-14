@@ -417,3 +417,7 @@ table.matrix tr.hlrow td.masked::after { animation: curtain .5s cubic-bezier(.4,
 .ghost-fly.word-ghost { background: var(--accent-soft); border-radius: 6px; padding: 0 .4rem; color: var(--accent); font-family: var(--serif); }
 .ghost-fly.ticket-ghost { background: var(--accent); color: #fff; border-radius: 6px; padding: 0 .45rem; font-family: var(--mono); font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { .sentence-scan .cur .ch { animation: none; color: var(--accent); } }
+.cellref { color: inherit; text-decoration: underline dotted var(--accent); text-underline-offset: 3px; }
+.cellref:hover { color: var(--accent); }
+table.matrix td.flash { animation: cellflash 1s ease-out; }
+@keyframes cellflash { 0% { box-shadow: 0 0 0 4px var(--warm); background: var(--warm-soft); } 100% { box-shadow: 0 0 0 0 transparent; } }

@@ -82,6 +82,26 @@ function renderInto(root, id) {
     }
   }, 0);
   bindHover(root, p);
+  bindCellRefs(root);
+}
+
+// Captions may contain <a class="cellref" data-cell="r,c">: clicking flashes
+// that cell of the result table (and the first table for single-table scenes).
+function bindCellRefs(root) {
+  root.querySelectorAll('.player-caption .cellref').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const [r, c] = a.dataset.cell.split(',').map(Number);
+      const tables = root.querySelectorAll('.player-stage table.matrix');
+      const table = tables[tables.length - 1];
+      const td = table && table.querySelector(`td[data-r="${r}"][data-c="${c}"]`);
+      if (!td) return;
+      td.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      td.classList.remove('flash');
+      void td.offsetWidth;
+      td.classList.add('flash');
+    });
+  });
 }
 
 // Helper for scene-specific animations: a ghost copy of `from` flies to `to`.

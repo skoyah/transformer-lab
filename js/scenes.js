@@ -14,6 +14,9 @@ export const vec = (v, d = 2) => `[${v.map((x) => fmt(x, d)).join(', ')}]`;
 
 function doneCaption(text) { return `<span class="done-mark">Done.</span> ${text}`; }
 
+// A clickable reference to a cell of the result table: the player flashes it.
+export function cellRef(r, c, html) { return `<a class="cellref" href="#" data-cell="${r},${c}">${html}</a>`; }
+
 // C[i][j] = A[i] · B[:,j]  — one cell per step, row-major.
 export function matmulScene({
   A, B, C, aTitle, bTitle, cTitle, aRows, aCols, bCols, bByRow = false,
@@ -42,7 +45,7 @@ export function matmulScene({
           filled: (r, c) => r * m + c < k, hlCell: k ? [i, j] : null, pulse: k ? [i, j] : null })),
       ]);
       if (!k) return { body, caption: idle };
-      const caption = `<b>${cTitle}[${i}][${j}]</b> — row “${esc(aRows[i])}” of ${aTitle} dotted with ${bByRow ? 'row' : 'column'} <b>${esc(bCols[j])}</b> of ${bTitle}.`
+      const caption = `${cellRef(i, j, `<b>${cTitle}[${i}][${j}]</b>`)} — row “${esc(aRows[i])}” of ${aTitle} dotted with ${bByRow ? 'row' : 'column'} <b>${esc(bCols[j])}</b> of ${bTitle}.`
         + (k === n * m ? ` ${doneCaption(done || `All ${n}×${m} cells of ${cTitle} are computed.`)}` : '');
       const extra = tail ? tail(i, j) : '';
       return { body, caption, worked: dotExample(`${cTitle}[${i}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${i}]`, bName: `${bTitle}[${bByRow ? j : ':,' + j}]`, tail: extra }) };
@@ -243,7 +246,7 @@ export function predictionScene({ probs, vocab, tokens, prediction, idle }) {
       const p = prediction[i];
       const actual = i + 1 < n ? tokens[i + 1] : null;
       const verdict = actual == null ? 'There is no next word in the text to check against.' : p.token === actual ? 'That is right.' : `The text actually continues with “${esc(actual)}”.`;
-      return { body, caption: `After “${esc(tokens[i])}”, the biggest number in the row is <b>${pct(p.prob)}</b> for “${esc(p.token)}”. ${verdict}` + (k === n ? ` ${doneCaption('')}` : '') };
+      return { body, caption: `After “${esc(tokens[i])}”, the biggest number in the row is ${cellRef(i, p.id, `<b>${pct(p.prob)}</b>`)} for “${esc(p.token)}”. ${verdict}` + (k === n ? ` ${doneCaption('')}` : '') };
     },
   };
 }
