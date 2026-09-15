@@ -141,9 +141,12 @@ export function initPage(active) {
   if (header) {
     header.replaceChildren(
       el('a', { class: 'brand', href: 'index.html', text: 'Transformer Lab' }),
-      el('nav', {}, CHAPTERS.map((c) => el('a', { href: c.href, class: c.href === active ? 'active' : '' }, [
+      el('nav', {}, CHAPTERS.map((c) => el('a', { href: c.href, class: c.href === active ? 'active' : '', 'aria-current': c.href === active ? 'page' : null }, [
         el('span', { class: 'n', text: c.n }), c.label,
       ]))),
+      // Compact chapter picker for narrow screens (the nav links hide).
+      el('select', { class: 'nav-select', 'aria-label': 'Chapter', onchange: (e) => { location.href = e.target.value; } },
+        CHAPTERS.map((c) => el('option', { value: c.href, text: `${c.n} · ${c.label}`, selected: c.href === active }))),
       el('span', { class: 'nav-sentence', id: 'nav-sentence' }),
     );
   }
@@ -384,12 +387,13 @@ let sequence = 0;
 function mountLog() {
   logEl = document.getElementById('recalc-log');
   if (!logEl) return;
+  if (matchMedia('(max-width: 760px)').matches) logEl.classList.add('collapsed');
   logEl.replaceChildren(
     el('header', {}, [
       el('strong', { text: 'What just changed' }),
       el('span', {}, [
         el('button', { class: 'ghost', text: 'clear', onclick: () => list().replaceChildren() }),
-        el('button', { class: 'ghost', text: 'hide', onclick: (e) => { logEl.classList.toggle('collapsed'); e.target.textContent = logEl.classList.contains('collapsed') ? 'show' : 'hide'; } }),
+        el('button', { class: 'ghost toggle', text: logEl.classList.contains('collapsed') ? 'show' : 'hide', onclick: (e) => { logEl.classList.toggle('collapsed'); e.target.textContent = logEl.classList.contains('collapsed') ? 'show' : 'hide'; } }),
       ]),
     ]),
     el('ol', { class: 'entries' }),
