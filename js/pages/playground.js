@@ -1,4 +1,4 @@
-import { tokenize, forwardIds, generate, topK, lossOf } from '../transformer.js';
+import { tokenize, forwardIds, generate, topK, lossOf, trainStep } from '../transformer.js';
 import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, train } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs } from '../ui.js';
 import { player, groupControls } from '../player.js';
@@ -8,6 +8,35 @@ initPage('playground.html');
 const content = document.getElementById('content');
 
 let rerolls = 0;          // session-only: which random draw to use when sampling
+
+// Training timeline: deterministic replay of the recorded steps from the
+// fresh model, cached per step. checkpoint === null means "now".
+const replay = { cache: [], key: null, busy: false, target: null };
+let checkpoint = null;
+function replayKey(s) { return `${s.seed}|${s.config.dim}|${s.config.hidden}|${s.vocab.length}|${s.trainingHistory.length}`; }
+function weightsAt(s, fresh, k) {
+  if (replay.key !== replayKey(s)) { replay.cache = [fresh.weights]; replay.key = replayKey(s); }
+  if (replay.cache.length > k) return replay.cache[k];
+  return null; // not computed yet — replayTo() fills the cache in chunks
+}
+function replayTo(s, fresh, k) {
+  replay.target = k;
+  if (replay.busy) return;
+  replay.busy = true;
+  const chunk = () => {
+    const cur = getExperiment();
+    if (replayKey(cur) !== replay.key) { replay.cache = [fresh.weights]; replay.key = replayKey(cur); }
+    const t0 = performance.now();
+    while (replay.cache.length <= replay.target && performance.now() - t0 < 60) {
+      const i = replay.cache.length - 1;
+      const lr = cur.trainingHistory[i]?.learningRate ?? cur.learningRate;
+      replay.cache.push(trainStep({ ...fresh, weights: replay.cache[i] }, lr).weights);
+    }
+    render();
+    if (replay.cache.length <= replay.target) setTimeout(chunk, 0); else replay.busy = false;
+  };
+  setTimeout(chunk, 0);
+}
 
 // These inputs live across re-renders so typing and dragging are never interrupted.
 let renderTimer = null;
@@ -77,7 +106,7 @@ function modelCard(title, sub, model, ids, pg, which) {
     el('div', { class: 'sub', text: 'Let it write' }),
     player({
       id: `gen-${which}`, track: false,
-      key: JSON.stringify([ids, pg.steps, pg.temperature, rerolls, model.updatedAt, model.trainingHistory.length]),
+      key: JSON.stringify([ids, pg.steps, pg.temperature, rerolls, model.updatedAt, model.trainingHistory.length, which === 'yours' ? checkpoint : null]),
       scene: generateScene(model, ids, pg, generate(model, ids, { steps: pg.steps, temperature: pg.temperature, seed: rerolls })),
     }),
   ]);
@@ -122,12 +151,40 @@ function render() {
     ]),
   ]);
 
+  // Which version of "your model" to show: now, or a replayed checkpoint.
+  let yours = s;
+  let yoursSub = `${steps} training step${steps === 1 ? '' : 's'}${steps ? '' : ' (edits only)'} · surprise ${fmt(lossNow, 2)}`;
+  let timelineNote = '';
+  if (checkpoint != null && checkpoint < steps) {
+    const w = weightsAt(s, fresh, checkpoint);
+    if (w) {
+      yours = { ...s, weights: w, trainingHistory: s.trainingHistory.slice(0, checkpoint) };
+      yoursSub = `replayed to step ${checkpoint} of ${steps} · surprise ${fmt(lossOf(yours), 2)}`;
+    } else {
+      replayTo(s, fresh, checkpoint);
+      timelineNote = `replaying… ${replay.cache.length - 1} / ${checkpoint}`;
+      yoursSub = `replaying to step ${checkpoint}…`;
+    }
+  }
+  const timeline = steps ? el('div', { class: 'card timeline' }, [
+    el('div', { class: 'timeline-head' }, [
+      el('strong', { text: 'Training timeline' }),
+      el('span', { class: 'fig-caption', style: 'margin:0', text: timelineNote || (checkpoint == null || checkpoint >= steps ? `now — after all ${steps} steps` : `after ${checkpoint} step${checkpoint === 1 ? '' : 's'}`) }),
+    ]),
+    el('input', { type: 'range', min: 0, max: steps, value: checkpoint ?? steps, style: 'width:100%', 'aria-label': 'Training step',
+      oninput: (e) => { const k = Number(e.target.value); checkpoint = k >= steps ? null : k; render(); } }),
+    el('div', { class: 'timeline-ticks' }, [el('span', { text: 'fresh (0)' }), el('span', { text: `now (${steps})` })]),
+    s.handEdited ? el('p', { class: 'fig-caption', text: 'You also edited weights by hand, so the replay will not land exactly on your current model.' }) : null,
+    el('p', { class: 'fig-caption', text: 'Drag to watch the same prompt through the model at any point in its training. Every step is recomputed from the fresh weights, so this is the real history, not a recording.' }),
+  ]) : null;
+
   // Cards first: they create the players the group bar drives.
   const cards = el('div', { class: 'compare' }, [
     modelCard('Fresh model', `same seed, never trained · surprise on your text ${fmt(lossFresh, 2)}`, fresh, ids, pg, 'fresh'),
-    modelCard('Your model', `${steps} training step${steps === 1 ? '' : 's'}${steps ? '' : ' (edits only)'} · surprise ${fmt(lossNow, 2)}`, s, ids, pg, 'yours'),
+    modelCard(checkpoint != null && checkpoint < steps ? `Your model, step ${checkpoint}` : 'Your model', yoursSub, yours, ids, pg, 'yours'),
   ]);
   const compare = el('div', { class: 'stack' }, [
+    timeline,
     el('div', { class: 'card flush' }, groupControls(['gen-fresh', 'gen-yours'], { label: 'Both models, in step' })),
     cards,
   ]);
@@ -166,6 +223,9 @@ function render() {
   if (active === prompt || active === tempInput || active === stepsInput) {
     active.focus({ preventScroll: true });
     if (sel) prompt.setSelectionRange(sel[0], sel[1]);
+  } else if (active && active.getAttribute('aria-label') === 'Training step') {
+    const next = document.querySelector('input[aria-label="Training step"]');
+    if (next) next.focus({ preventScroll: true });
   }
 }
 

@@ -218,6 +218,7 @@ export function setWeightCell(name, row, col, value) {
     if (w[col] === v) return null;
     w[col] = v;
   }
+  state.handEdited = true;
   return commit([`weights.${name}`], { cell: { name, row, col, value: v } });
 }
 
@@ -228,6 +229,7 @@ export function setWeights(partial) {
     state.weights[name] = value;
     keys.push(`weights.${name}`);
   }
+  state.handEdited = true;
   return keys.length ? commit(keys) : null;
 }
 
@@ -252,6 +254,7 @@ export function setModelConfig({ seed, dim, hidden }) {
     positions: Math.max(MIN_POSITIONS, state.tokenIds.length),
   });
   state.trainingHistory = [];
+  state.handEdited = false;
   return commit([...changed, 'weights'], { reinitialised: true });
 }
 

@@ -423,3 +423,7 @@ table.matrix tr.hlrow td.masked::after { animation: curtain .5s cubic-bezier(.4,
 .cellref:hover { color: var(--accent); }
 table.matrix td.flash { animation: cellflash 1s ease-out; }
 @keyframes cellflash { 0% { box-shadow: 0 0 0 4px var(--warm); background: var(--warm-soft); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.card.timeline { margin: 0; }
+.timeline-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-family: var(--sans); margin-bottom: .4rem; }
+.timeline-ticks { display: flex; justify-content: space-between; font: 11px/1 var(--sans); color: var(--muted); margin-top: .2rem; }
+.card.timeline input[type=range] { width: 100%; }
