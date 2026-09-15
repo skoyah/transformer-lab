@@ -144,12 +144,44 @@ export function initPage(active) {
     if (s) s.textContent = `“${getExperiment().sentence}”`;
   };
   updateSentence();
+  mountMinimap(active);
   onChange((event) => {
     updateSentence();
+    updateMinimap();
     if (event.quiet) return;
     if (event.affected.length || event.reset || event.external) showRecalculation(event);
   });
   mountLog();
+}
+
+// ---------------------------------------------------------------------------
+// Mini-map: one dot per stage in the sticky nav, filled once played, grouped
+// by chapter; the current chapter's group is underlined. Click a dot to jump.
+// ---------------------------------------------------------------------------
+
+function mountMinimap(active) {
+  const header = document.getElementById('nav');
+  if (!header) return;
+  const groups = [];
+  for (const stage of STAGES) {
+    let g = groups[groups.length - 1];
+    if (!g || g.page !== stage.page) { g = { page: stage.page, stages: [] }; groups.push(g); }
+    g.stages.push(stage);
+  }
+  const map = el('div', { class: 'minimap', title: 'Stages: filled = played since its inputs last changed' }, groups.map((g) => el('span', { class: `mm-group ${g.page === active ? 'here' : ''}` },
+    g.stages.map((st) => el('a', { class: 'mm-dot', href: `${st.page}#${st.id}`, dataset: { stage: st.id }, title: st.label, 'aria-label': st.label })))));
+  const sentence = header.querySelector('.nav-sentence');
+  header.insertBefore(map, sentence);
+  updateMinimap();
+}
+
+function updateMinimap() {
+  const progress = getExperiment().progress || {};
+  document.querySelectorAll('.minimap .mm-dot').forEach((dot) => {
+    const done = progress[dot.dataset.stage] === 'done';
+    if (done && !dot.classList.contains('done')) { dot.classList.add('done', 'just'); setTimeout(() => dot.classList.remove('just'), 900); }
+    else if (!done) dot.classList.remove('done');
+  });
 }
 
 // ---------------------------------------------------------------------------
