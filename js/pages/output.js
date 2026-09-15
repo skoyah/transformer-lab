@@ -116,7 +116,11 @@ function render() {
       <li>Train for a while, then replay the prediction stage above. Watch the ✓ column fill in and the surprise curve fall towards 0. Then revisit Chapter 3 — the attention pattern has reorganised itself.</li>
       <li>Set the learning rate to 1 and train. Too big a step overshoots: surprise may jump <em>up</em>. Bring it back to 0.1.</li>
       <li>Bookmark the model on the Start page before training, so you can compare before and after in Chapter 6.</li>
-    </ul>`),
+    </ul>`, null, [
+      { label: 'Train 10 steps now', run: () => { pauseAll(); train(10); }, then: 'prediction' },
+      { label: 'Learning rate → 1', run: () => setLearningRate(1) },
+      { label: 'Learning rate → 0.1', run: () => setLearningRate(0.1) },
+    ]),
     callout('key', `<p>A language model is nothing more than “predict the next token”, trained by nudging weights to be less surprised by real text. Everything it appears to know is a side effect of getting good at that one game.</p>`),
     underHood('loss = mean over t of −log P[t][ id[t+1] ]        w ← w − lr · ∂loss/∂w', `<p>Gradients here are central finite differences, (loss(w+ε) − loss(w−ε)) / 2ε, computed for every parameter. Slow but transparent — the whole forward pass is re-run for each nudge.</p>`),
   ]);

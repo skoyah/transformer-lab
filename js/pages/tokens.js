@@ -35,7 +35,10 @@ function render() {
     callout('try', `<ul>
       <li>Add a word that isn't in the dictionary yet — say, <em>“hat”</em>. It gets the next free ticket and nothing else changes.</li>
       <li>Repeat a word. Notice it gets the same ID each time. The model can't yet tell the two copies apart — Chapter 2 fixes that.</li>
-    </ul>`),
+    </ul>`, null, [
+      { label: 'Add “hat” to the text', run: () => setSentence(`${getExperiment().sentence} hat`), then: 'tokenIds' },
+      { label: `Repeat “${esc(d.tokens[0])}” at the end`, run: () => setSentence(`${getExperiment().sentence} ${d.tokens[0]}`), then: 'tokenIds' },
+    ]),
     callout('key', `<p>Ticket numbers carry no meaning. “cat” being 1 and “sat” being 2 does not make them neighbours or similar in any way. Meaning is added in the next chapter, and it is learned, not assigned.</p>`),
     underHood('tokens = sentence.toLowerCase().match(/[a-z0-9\']+|[^\\sa-z0-9\']/g);  ids = tokens.map(t => vocab.indexOf(t))',
       `<p>The vocabulary only ever grows: a new word is appended, existing IDs are never renumbered, so every word's row in the embedding table (next chapter) stays put.</p>`),

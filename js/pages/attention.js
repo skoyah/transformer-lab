@@ -1,4 +1,4 @@
-import { getExperiment, getDerived, setWeightCell, setCausal } from '../state.js';
+import { getExperiment, getDerived, setWeightCell, setWeights, setCausal } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, chapterNav, tokenLabels, dimLabels } from '../ui.js';
 import { SPEEDS } from '../player.js';
 import { player, chapterControls } from '../player.js';
@@ -121,7 +121,11 @@ function render() {
       <li>Set every cell of <strong>Wq</strong> to 0. All questions become blank, all scores 0, and every word attends <em>equally</em> to what it can see. Replay the softmax stage and watch the heatmap flatten.</li>
       <li>Make one number in <strong>Wk</strong> large (say 5). One badge becomes very “loud”; see a column of the attention table darken.</li>
       <li>Untick “no peeking”. The top-right of the table fills in — words now look at the future.</li>
-    </ul>`),
+    </ul>`, null, [
+      { label: 'Wq → all zeros', run: () => setWeights({ Wq: s.weights.Wq.map((r) => r.map(() => 0)) }), then: 'attentionWeights' },
+      { label: 'Wk[0][0] → 5', run: () => setWeightCell('Wk', 0, 0, 5), then: 'attentionWeights' },
+      { label: s.config.causal ? 'Allow peeking' : 'No peeking again', run: () => setCausal(!getExperiment().config.causal), then: 'scaledScores' },
+    ]),
     callout('key', `<p>Attention is just: <em>score every pair, turn scores into shares, blend</em>. Real models run several of these side by side (“heads”) and stack many layers, but each head is exactly this page.</p>`),
   ]);
 

@@ -120,6 +120,7 @@ function writeStorage(value) {
 }
 
 let state = readStorage() || createExperiment();
+setTimeout(() => { lastCommitted = experimentOnly(); }, 0);
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
 if (!state.progress) state.progress = {};
 if (!state.animation || !state.animation.speed) state.animation = { speed: 'normal' };
@@ -149,15 +150,53 @@ export function onChange(fn) {
   return () => listeners.delete(fn);
 }
 
+// Undo history: the experiment as it was before each model-changing commit.
+const UNDO_DEPTH = 30;
+const undoStack = [];
+const redoStack = [];
+let lastCommitted = null;
+
+function rememberForUndo(extra) {
+  if (extra.undo || extra.redo) return;
+  if (lastCommitted) {
+    undoStack.push(lastCommitted);
+    if (undoStack.length > UNDO_DEPTH) undoStack.shift();
+    redoStack.length = 0;
+  }
+}
+
 // The single write path: persist, invalidate, notify.
 function commit(changedKeys, extra = {}) {
+  rememberForUndo(extra);
   state.updatedAt = Date.now();
   const affected = affectedStages(changedKeys);
   for (const id of affected) { dirty.add(id); delete state.progress[id]; } // needs replaying
   writeStorage(state);
+  lastCommitted = experimentOnly();
   const event = { changedKeys, affected, state, ...extra };
   for (const fn of listeners) fn(event);
   return event;
+}
+
+export function canUndo() { return undoStack.length > 0; }
+export function canRedo() { return redoStack.length > 0; }
+
+export function undo() {
+  const prev = undoStack.pop();
+  if (!prev) return null;
+  redoStack.push(experimentOnly());
+  Object.assign(state, JSON.parse(JSON.stringify(prev)));
+  ensureCapacity(state);
+  return commit(['*'], { undo: true });
+}
+
+export function redo() {
+  const next = redoStack.pop();
+  if (!next) return null;
+  undoStack.push(experimentOnly());
+  Object.assign(state, JSON.parse(JSON.stringify(next)));
+  ensureCapacity(state);
+  return commit(['*'], { redo: true });
 }
 
 // Preferences that do not touch the model: save without recalculating.

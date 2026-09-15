@@ -1,4 +1,4 @@
-import { getExperiment, getDerived, setWeightCell } from '../state.js';
+import { getExperiment, getDerived, setWeightCell, setWeights } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, chapterNav, tokenLabels, dimLabels } from '../ui.js';
 import { player, chapterControls } from '../player.js';
 import { lookupScene, rowScene, vec } from '../scenes.js';
@@ -73,7 +73,12 @@ function render() {
     callout('try', `<ul>
       <li>Set an entire row of E to 0. That word becomes “blank”: its rows in X are now purely position. Watch what happens to it in Chapter 3.</li>
       <li>Make P all zeros. Repeated words become identical again, and the model loses any sense of order.</li>
-    </ul>`),
+    </ul>`, null, [
+      { label: `Blank out “${esc(d.tokens[0])}” (row ${d.tokenIds[0]} of E → 0)`, run: () => {
+        const E = getExperiment().weights.embedding.map((r) => r.slice()); E[d.tokenIds[0]] = E[d.tokenIds[0]].map(() => 0); setWeights({ embedding: E });
+      }, then: 'embeddings' },
+      { label: 'Zero the position table', run: () => setWeights({ positional: getExperiment().weights.positional.map((r) => r.map(() => 0)) }), then: 'positionalInput' },
+    ]),
     callout('key', `<p>From this point on, nothing is saved. X and everything after it are <span class="tag derived">recomputed</span> from E, P and the token IDs whenever any of them change — but only when you press play.</p>`),
     underHood('X[i] = E[ id[i] ] + P[i]', `<p>E is <code>vocab × d</code>, P is <code>positions × d</code>, X is <code>tokens × d</code>. Real models often learn P too, or use cleverer position tricks, but “add a position pattern” is the core idea.</p>`),
   ]);

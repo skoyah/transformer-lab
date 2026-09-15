@@ -3,7 +3,7 @@
 // worked examples and the "what just changed" panel. No maths lives here.
 
 import { STAGE_BY_ID, STAGES, shapeOf } from './transformer.js';
-import { getExperiment, onChange, setCurrentStep } from './state.js';
+import { getExperiment, onChange, setCurrentStep, undo, redo } from './state.js';
 
 export const CHAPTERS = [
   { href: 'index.html', n: 0, label: 'Start here', title: 'A transformer you can read' },
@@ -64,10 +64,18 @@ export function prose(html) {
 }
 
 const CALLOUT_LABELS = { idea: 'Analogy', try: 'Try it', key: 'Key idea' };
-export function callout(kind, html, label) {
+// actions: [{ label, run, then }] — one-click experiments; `then` is a stage id to scroll to.
+export function callout(kind, html, label, actions = null) {
   return el('aside', { class: `callout ${kind}` }, [
     el('div', { class: 'label', text: label || CALLOUT_LABELS[kind] || kind }),
     el('div', { html }),
+    actions && actions.length ? el('div', { class: 'actions' }, [
+      ...actions.map((a) => el('button', { text: a.label, onclick: () => {
+        a.run();
+        if (a.then) setTimeout(() => { const n = document.getElementById(a.then); if (n) n.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 30);
+      } })),
+      el('span', { class: 'fig-caption', style: 'margin:0', text: '⌘Z / Ctrl-Z undoes any of these.' }),
+    ]) : null,
   ]);
 }
 
@@ -145,6 +153,15 @@ export function initPage(active) {
   };
   updateSentence();
   mountMinimap(active);
+  // Cmd/Ctrl-Z undoes the last model change (Shift for redo), even from inside a cell.
+  document.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
+    const t = e.target;
+    const typing = t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !t.closest('table.matrix')));
+    if (typing) return;
+    e.preventDefault();
+    if (e.shiftKey) redo(); else undo();
+  });
   onChange((event) => {
     updateSentence();
     updateMinimap();
@@ -342,6 +359,8 @@ function mountLog() {
 function list() { return logEl.querySelector('.entries'); }
 
 function describeChange(event) {
+  if (event.undo) return 'Undo — the previous version of the model is back';
+  if (event.redo) return 'Redo';
   if (event.reset) return 'You reset the experiment';
   if (event.snapshot) return `You loaded the bookmark “${event.snapshot.name}”`;
   if (event.external) return 'The experiment changed in another tab';

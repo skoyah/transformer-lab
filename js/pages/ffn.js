@@ -1,4 +1,4 @@
-import { getExperiment, getDerived, setWeightCell } from '../state.js';
+import { getExperiment, getDerived, setWeightCell, setWeights } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabels, dimLabels } from '../ui.js';
 import { player, chapterControls, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, vec } from '../scenes.js';
@@ -120,7 +120,10 @@ function render() {
     callout('try', `<ul>
       <li>Set every value of <strong>b₁</strong> to −5. ReLU now blocks everything, H becomes all zeros, and F collapses to just b₂ for every word.</li>
       <li>Set <strong>W₂</strong> to all zeros. The block's thought contributes nothing; N₂ becomes a normalised copy of N₁ — the residual path alone carries the signal.</li>
-    </ul>`),
+    </ul>`, null, [
+      { label: 'b₁ → −5 everywhere', run: () => setWeights({ b1: s.weights.b1.map(() => -5) }), then: 'ffnHidden' },
+      { label: 'W₂ → all zeros', run: () => setWeights({ W2: s.weights.W2.map((r) => r.map(() => 0)) }), then: 'norm2' },
+    ]),
     callout('key', `<p>A transformer block is two moves, each wrapped in “add to the original and normalise”: <em>attention</em> (words exchange information) and <em>feed-forward</em> (each word processes it alone).</p>`),
   ]);
 

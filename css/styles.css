@@ -466,3 +466,5 @@ svg.flow .node.just circle { animation: nodepop .9s ease-out; transform-box: fil
 svg.flow .node .lbl { fill: var(--ink-soft); font-size: 10px; }
 svg.flow .node .inp { fill: var(--warm); font-size: 8.5px; font-family: var(--mono); }
 svg.flow .node a:hover circle { stroke-width: 3; }
+.callout .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: .8rem; }
+.callout .actions button { font-size: 13.5px; }
