@@ -471,3 +471,6 @@ svg.flow .node a:hover circle { stroke-width: 3; }
 table.matrix.editable input { cursor: ew-resize; }
 table.matrix.editable input:focus { cursor: text; }
 body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none; }
+.card.player:focus { outline: none; }
+.card.player:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card.player:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }

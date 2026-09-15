@@ -50,7 +50,18 @@ export function player({ id, scene, label, key = null, track = true }) {
   p.total = scene.total;
   p.label = label;
   if (p.step > scene.total) p.step = scene.total;
-  const root = el('div', { class: 'card player', dataset: { player: id, stage: id }, id });
+  const root = el('div', { class: 'card player', dataset: { player: id, stage: id }, id, tabindex: '0',
+    title: 'Click, then: Space play/pause · ←/→ step · Home/End' });
+  // Keyboard: works once anything inside the player has focus (a click does it).
+  root.addEventListener('keydown', (e) => {
+    if (e.target.matches('input[type="text"], textarea, select')) return;
+    if (e.key === ' ' && e.target.tagName === 'BUTTON') return; // the button's own click handles it
+    const p = players.get(id);
+    if (!p) return;
+    const map = { ' ': () => (p.playing ? pause(id) : play(id)), ArrowRight: () => { pause(id); setStep(id, p.step + 1); },
+      ArrowLeft: () => { pause(id); setStep(id, p.step - 1); }, Home: () => { pause(id); setStep(id, 0); }, End: () => { pause(id); setStep(id, p.total); } };
+    if (map[e.key]) { e.preventDefault(); map[e.key](); }
+  });
   renderInto(root, id);
   return root;
 }
