@@ -4,6 +4,7 @@
 // every number comes from transformer.js via getDerived().
 
 import { el, esc, fmt, pct, matrixTable, dotExample, op } from './ui.js';
+import { WORD_START } from './transformer.js';
 import { flyGhost } from './player.js';
 
 const row = (children) => el('div', { class: 'figure-row' }, children);
@@ -300,32 +301,65 @@ export function predictionScene({ probs, vocab, tokens, prediction, idle, nextTo
   };
 }
 
-// BPE learning, one merge per step: the text as symbols, the most frequent
-// adjacent pair found and merged, the sequence shrinking as it goes.
-export function bpeScene({ initial, merges, steps, idle, sampleWords = 40 }) {
-  const n = merges.length;
-  const render = (words, highlight) => el('div', { class: 'bpe-words' }, words.slice(0, sampleWords).map((syms) => el('span', { class: 'bpe-word' },
-    syms.map((sym) => el('span', { class: `sym ${highlight && sym === highlight ? 'just' : ''}`, text: sym })))).concat(words.length > sampleWords ? [el('span', { class: 'fig-caption', text: `… and ${words.length - sampleWords} more words` })] : []));
-  const countTokens = (words) => words.reduce((a, w) => a + w.length, 0);
-  const vocabOf = (words) => new Set(words.flat()).size;
+// BPE learning, one merge per step. Each step first lights up every place
+// the winning pair occurs, then slides the two symbols together.
+export function bpeScene({ initial, merges, steps, idle, corpusWords = null, totalMerges = null }) {
+  const n = steps.length; // merges the player steps through (the first few dozen)
+  const renderWords = (words, { pair = null, merged = null } = {}) => el('div', { class: 'bpe-words' }, words.map((syms) => el('span', { class: 'bpe-word' },
+    syms.map((sym, i) => {
+      const isA = pair && sym === pair[0] && syms[i + 1] === pair[1];
+      const isB = pair && sym === pair[1] && i > 0 && syms[i - 1] === pair[0] && !(syms[i - 1] === pair[1] && syms[i - 2] === pair[0]);
+      return el('span', { class: `sym ${merged && sym === merged ? 'just' : ''} ${isA ? 'pa' : ''} ${isB ? 'pb' : ''}` }, [
+        sym.startsWith(WORD_START) ? el('span', { class: 'ws', text: WORD_START }) : null, sym.replace(WORD_START, ''),
+      ]);
+    }))));
+  const stats = (words) => el('div', { class: 'kpis small' }, [
+    el('div', {}, [el('b', { text: `${words.reduce((a, w) => a + w.length, 0)}` }), el('span', { text: 'tokens in these words' })]),
+    el('div', {}, [el('b', { text: `${new Set(words.flat()).size}` }), el('span', { text: 'distinct symbols in them' })]),
+  ]);
   return {
     total: n,
     frame(k) {
       const words = k ? steps[k - 1] : initial;
+      const before = k ? (k === 1 ? initial : steps[k - 2]) : null;
       const merge = k ? merges[k - 1] : null;
+      const wordsNode = renderWords(words, { merged: merge && merge.result });
       const body = el('div', { class: 'stack' }, [
-        render(words, merge && merge.result),
+        wordsNode,
         merge ? el('div', { class: 'bpe-pairs' }, [
           el('span', { class: 'fig-caption', style: 'margin:0', text: 'Most frequent neighbouring pairs before this merge:' }),
-          ...merge.top.map(({ pair, count }) => el('span', { class: `pair ${pair[0] === merge.a && pair[1] === merge.b ? 'chosen' : ''}` }, [`${pair[0]} + ${pair[1]}`, el('small', { text: `×${count}` })])),
+          ...(merge.top || []).map(({ pair, count }) => el('span', { class: `pair ${pair[0] === merge.a && pair[1] === merge.b ? 'chosen' : ''}` }, [`${pair[0]} + ${pair[1]}`, el('small', { text: `×${count}` })])),
         ]) : null,
-        el('div', { class: 'kpis small' }, [
-          el('div', {}, [el('b', { text: `${countTokens(words)}` }), el('span', { text: 'tokens in the text' })]),
-          el('div', {}, [el('b', { text: `${vocabOf(words)}` }), el('span', { text: 'distinct symbols' })]),
-        ]),
+        stats(words),
+        corpusWords ? el('p', { class: 'fig-caption', style: 'margin:0', text: `Showing the first ${words.length} of the corpus's ${corpusWords} words; the counts are over the whole corpus.` }) : null,
       ]);
       if (!k) return { body, caption: idle };
-      return { body, caption: `Merge <b>${k}</b>: “${esc(merge.a)}” + “${esc(merge.b)}” appear side by side <b>${merge.count}</b> times — more than any other pair — so they become one symbol, “${esc(merge.result)}”.` + (k === n ? ` ${doneCaption(`${n} merges learned. GPT-2 learned about 50,000 of these from 40 GB of web text; the procedure is exactly this.`)}` : '') };
+      return {
+        body,
+        caption: `Merge <b>${k}</b>: “${esc(merge.a)}” + “${esc(merge.b)}” sit side by side <b>${merge.count}</b> times — more than any other pair — so they become one symbol, “${esc(merge.result)}”.` + (k === n ? ` ${doneCaption(totalMerges && totalMerges > n ? `${n} of ${totalMerges} merges shown; the remaining ${totalMerges - n} continue exactly the same way, with ever rarer pairs. GPT-2 learned about 50,000 from 40 GB of web text.` : `${n} merges learned. GPT-2 learned about 50,000 from 40 GB of web text; the procedure is exactly this.`)}` : ''),
+        animate(root, ms) {
+          // 1. show the state before the merge with every occurrence lit up
+          const pre = renderWords(before, { pair: [merge.a, merge.b] });
+          const host = root.querySelector('.bpe-words');
+          if (!host) return;
+          host.replaceWith(pre);
+          const countMs = Math.max(250, Math.min(900, ms * 0.4));
+          const glideMs = Math.max(180, Math.min(450, ms * 0.22));
+          // 2. slide each b onto its a, then swap in the merged rendering
+          setTimeout(() => {
+            if (!pre.isConnected) return;
+            const pairs = [...pre.querySelectorAll('.sym.pa')].map((a) => [a, a.nextElementSibling]).filter(([, b]) => b && b.classList.contains('pb'));
+            const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+            pairs.forEach(([a, b]) => {
+              if (reduced) return;
+              const dx = a.getBoundingClientRect().right - b.getBoundingClientRect().left;
+              b.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${dx}px)` }], { duration: glideMs, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+              a.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }], { duration: glideMs });
+            });
+            setTimeout(() => { if (pre.isConnected) pre.replaceWith(renderWords(words, { merged: merge.result })); }, reduced ? 0 : glideMs + 40);
+          }, countMs);
+        },
+      };
     },
   };
 }

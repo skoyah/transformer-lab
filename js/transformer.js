@@ -216,11 +216,14 @@ function mergePair(words, a, b) {
 }
 
 // Learn up to `numMerges` merges from the text. Returns
-// { merges: [{ a, b, result, count }], steps: [words after each merge], initial }.
+// { merges: [{ a, b, result, count, top }], steps: [words after each merge], initial }.
 // Deterministic: ties broken alphabetically. Stops when no pair occurs twice.
-export function learnBpe(sentence, numMerges) {
+// `keepSteps` bounds how many intermediate states are stored (the player only
+// shows the first few dozen merges; a corpus-sized history would be heavy).
+export function learnBpe(sentence, numMerges, { keepSteps = Infinity, sampleWords = Infinity } = {}) {
   let words = wordSymbols(sentence);
-  const initial = words.map((w) => w.slice());
+  const snapshot = (ws) => ws.slice(0, sampleWords).map((w) => w.slice());
+  const initial = snapshot(words);
   const merges = [];
   const steps = [];
   for (let m = 0; m < numMerges; m++) {
@@ -233,8 +236,10 @@ export function learnBpe(sentence, numMerges) {
     if (!best) break;
     const [a, b] = best.key.split('\u0000');
     words = mergePair(words, a, b);
-    merges.push({ a, b, result: a + b, count: best.count, top: [...counts].filter(([, c]) => c >= 2).sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, 6).map(([k, c]) => ({ pair: k.split('\u0000'), count: c })) });
-    steps.push(words.map((w) => w.slice()));
+    const keep = merges.length < keepSteps;
+    merges.push({ a, b, result: a + b, count: best.count,
+      top: keep ? [...counts].filter(([, c]) => c >= 2).sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, 6).map(([k, c]) => ({ pair: k.split('\u0000'), count: c })) : null });
+    if (keep) steps.push(snapshot(words));
   }
   return { merges, steps, initial };
 }
@@ -247,9 +252,14 @@ export function applyBpe(sentence, merges) {
 }
 
 const bpeCache = new Map();
+export const BPE_PLAYER_STEPS = 40;   // merges the Chapter 1 player steps through
+export const BPE_SAMPLE_WORDS = 48;   // corpus words shown in that player
 export function bpeFor(trainingText, numMerges) {
-  const key = `${numMerges}|${trainingText}`;
-  if (!bpeCache.has(key)) { bpeCache.clear(); bpeCache.set(key, learnBpe(trainingText, numMerges)); }
+  const key = `${numMerges}|${trainingText.length}|${trainingText.slice(0, 64)}`;
+  if (!bpeCache.has(key)) {
+    if (bpeCache.size > 4) bpeCache.clear();
+    bpeCache.set(key, learnBpe(trainingText, numMerges, { keepSteps: BPE_PLAYER_STEPS, sampleWords: BPE_SAMPLE_WORDS }));
+  }
   return bpeCache.get(key);
 }
 
@@ -261,10 +271,11 @@ export function tokenize(sentence, tokenizer = null) {
   return tokenizeWords(sentence);
 }
 
-// The tokenizer a state implies (BPE learns from the state's own text).
+// The tokenizer a state implies: BPE with merges learned once from the corpus.
+import { CORPUS } from './corpus.js';
+export const BPE_MERGES = 300;
 export function tokenizerOf(state) {
-  const scheme = state.config && state.config.tokenizer ? state.config.tokenizer : 'words';
-  return { scheme, merges: state.config && state.config.merges != null ? state.config.merges : 20, trainingText: state.sentence };
+  return { scheme: 'bpe', merges: (state.config && state.config.merges) || BPE_MERGES, trainingText: CORPUS };
 }
 
 // Existing vocabulary entries keep their IDs; unseen tokens are appended.

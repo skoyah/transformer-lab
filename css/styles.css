@@ -534,3 +534,17 @@ table.matrix td.unmoved { opacity: .55; }
 .lens-label { font: 700 11.5px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
 .lens-range { font: 13px/1 var(--mono); color: var(--ink-soft); min-width: 12rem; }
 .lens select { font-size: 12.5px; padding: .25rem .4rem; }
+
+/* ---------- pieces & BPE counting ---------- */
+.pieces { display: inline-flex; flex-wrap: wrap; gap: .3rem .25rem; align-items: baseline; }
+.piece { font-family: var(--mono); font-size: 13px; padding: .12rem .4rem; border-radius: 5px; border: 1px solid var(--line-strong); background: var(--paper); }
+.piece .ws, .sym .ws { color: var(--muted); font-size: .85em; margin-right: 1px; }
+.piece.g0 { border-bottom: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+.piece.g1 { border-bottom: 3px solid color-mix(in srgb, var(--warm) 60%, transparent); }
+.piece.g2 { border-bottom: 3px solid color-mix(in srgb, var(--amber) 60%, transparent); }
+.piece.g3 { border-bottom: 3px solid color-mix(in srgb, rgb(var(--neg-rgb)) 60%, transparent); }
+.bpe-word .sym.pa, .bpe-word .sym.pb { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); position: relative; z-index: 1; }
+.bpe-word .sym.pb { z-index: 0; }
+.tok-any { display: flex; flex-wrap: wrap; gap: .8rem 1.2rem; align-items: center; }
+.tok-any input { flex: 1 1 16rem; font-family: var(--serif); font-size: 1.1rem; }
+.tok-any .stats { font: 13px/1.4 var(--sans); color: var(--muted); }

@@ -745,3 +745,16 @@ export function lensBar(n) {
     el('span', { class: 'fig-caption', style: 'margin:0; flex-basis:100%', text: 'Your text is longer than one screen of rows. The maths runs on all of it; the tables below show this window of positions.' }),
   ]);
 }
+
+
+// Pieces of text as chips, grouped by word: a piece starting with ▁ opens a
+// new group; groups alternate hue so “▁tok · en · ization” reads as one word.
+export function pieceChips(tokens, { marker = '▁' } = {}) {
+  let group = -1;
+  return el('span', { class: 'pieces' }, tokens.map((t) => {
+    if (t.startsWith(marker)) group++;
+    return el('span', { class: `piece g${Math.max(0, group) % 4}`, title: t.startsWith(marker) ? 'start of a word' : 'continues the word' }, [
+      t.startsWith(marker) ? el('span', { class: 'ws', text: marker }) : null, t.replace(marker, ''),
+    ]);
+  }));
+}

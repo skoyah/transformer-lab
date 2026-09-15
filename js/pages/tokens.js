@@ -1,21 +1,56 @@
 import { getExperiment, getDerived, setSentence, sentenceProblem } from '../state.js';
-import { learnBpe, tokenizeWords, tokenizeChars, WORD_START } from '../transformer.js';
-import { initPage, bindRender, el, esc, lesson, prose, callout, underHood, matrixTable, chapterNav, caption, windowOf, sliceRows, lensBar } from '../ui.js';
+import { bpeFor, tokenize, tokenizerOf, tokenizeWords, tokenizeChars, WORD_START, BPE_PLAYER_STEPS } from '../transformer.js';
+import { CORPUS } from '../corpus.js';
+import { initPage, bindRender, el, esc, lesson, prose, callout, underHood, matrixTable, chapterNav, caption, windowOf, sliceRows, lensBar, pieceChips } from '../ui.js';
 import { player, chapterControls } from '../player.js';
 import { tokenizeScene, idScene, bpeScene } from '../scenes.js';
 
 initPage('tokens.html');
 const content = document.getElementById('content');
 const STAGES_HERE = ['tokens', 'tokenIds'];
+let anyText = 'strawberry'; // session: the tokenise-anything box
+
+// Type anything, see its pieces. Session-only; never touches the model.
+function tokeniseAnything(cut) {
+  const input = el('input', { type: 'text', value: anyText, 'aria-label': 'Text to tokenise', placeholder: 'type any word or sentence…' });
+  const out = el('div', { class: 'stack' });
+  const show = () => {
+    const pieces = cut(input.value);
+    const letters = [...input.value.replace(/\s+/g, '')].length;
+    const wordsN = tokenizeWords(input.value).length;
+    out.replaceChildren(
+      pieces.length ? pieceChips(pieces) : el('span', { class: 'fig-caption', text: '…' }),
+      el('div', { class: 'stats', text: pieces.length ? `${letters} letters · ${wordsN} word${wordsN === 1 ? '' : 's'} · ${pieces.length} piece${pieces.length === 1 ? '' : 's'} — about ${(letters / Math.max(1, pieces.length)).toFixed(1)} letters per piece. Pieces with the same underline colour belong to the same word.` : '' }),
+    );
+  };
+  input.addEventListener('input', () => { anyText = input.value; show(); });
+  show();
+  return el('div', { class: 'card' }, [
+    el('strong', { style: 'font: 600 14px/1.3 var(--sans)', text: 'Tokenise anything' }),
+    el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .7rem', text: 'Common words stay whole; rare or foreign words fall into fragments; a made-up word still gets pieces. (This box only shows pieces — it does not change the model.)' }),
+    el('div', { class: 'tok-any' }, [input]),
+    out,
+  ]);
+}
+
+function strawberryCallout(cut) {
+  const word = 'strawberry';
+  const pieces = cut(word);
+  const rs = [...word].filter((c) => c === 'r').length;
+  const per = pieces.map((p) => `“${esc(p.replace(WORD_START, ''))}”${[...p].filter((c) => c === 'r').length ? ` (${[...p].filter((c) => c === 'r').length} r)` : ''}`).join(' + ');
+  return callout('key', `<p><strong>Why chatbots can't count the r's in “strawberry”.</strong> The model never receives letters. It receives ${pieces.length} tickets — ${per} — and the fact that “strawberry” has ${rs} r's is nowhere in those numbers. To answer, the model has to have <em>learned</em>, from text, how each piece is spelled. That is a strange thing to be bad at and a natural consequence of tokenization; it also explains why models are clumsy with rhymes, character counts and reversing words.</p>`, 'Consequence');
+}
 
 function render() {
   const s = getExperiment();
   const d = getDerived();
   const win = windowOf(d.tokens.length);
-  const mergesN = s.config.merges ?? 50;
-  const bpe = learnBpe(s.sentence, mergesN);
+  const tok = tokenizerOf(s);
+  const bpe = bpeFor(CORPUS, tok.merges);
+  const corpusWords = tokenizeWords(CORPUS).length;
   const words = tokenizeWords(s.sentence);
   const chars = tokenizeChars(s.sentence).length;
+  const cut = (text) => tokenize(text, tok);
 
   const textarea = el('textarea', { text: s.sentence, 'aria-label': 'Training text' });
   const problem = el('p', { class: 'fig-caption problem', hidden: !s.notice, text: s.notice || '' });
@@ -37,15 +72,16 @@ function render() {
   const pieces = lesson('Step one: cut it into pieces', [
     prose(`<p>The model doesn't work with a sentence, it works with a list of <strong>tokens</strong>. The obvious choice — one token per word — has two problems. A word the model has never seen is a dead end: there is no row for it. And the dictionary grows without bound, because every spelling, every name and every typo needs its own entry. Cutting into single letters fixes both, but then a sentence becomes a very long list and the model has to relearn what “cat” is from c, a, t every time.</p>
       <p>So real models cut text into <strong>pieces</strong> that range from a single character up to a whole common word: “tokenization” might become “token” + “ization”; a rare name becomes a handful of fragments; “the” stays one piece. Nothing is a dead end, because in the worst case a word falls apart into characters. This book uses the most common way of deciding the pieces, <strong>byte-pair encoding</strong> (BPE), which is what GPT, Llama and Mistral use.</p>
-      <p>BPE is learned, not designed. Start from single characters. Count which two neighbouring symbols sit next to each other most often, glue them into one new symbol, and repeat. Every merge is learned from the text — here, from yours. (The name comes from an older compression trick on bytes; GPT-style tokenizers literally start from the 256 possible bytes, so that any text at all can be tokenised. Ours starts from characters and, like the original recipe, merges only inside words.)</p>`),
+      <p>BPE is learned, not designed. Start from single characters. Count which two neighbouring symbols sit next to each other most often, glue them into one new symbol, and repeat. Every merge is learned from a body of text — a real tokenizer's from billions of words, this book's from a small corpus of ${corpusWords} words of plain English that ships with it. The merges are learned once and then frozen; your sentence is cut with them, it does not change them. (The name comes from an older compression trick on bytes; GPT-style tokenizers literally start from the 256 possible bytes, so that any text at all can be tokenised. Ours starts from characters and, like the original recipe, merges only inside words.)</p>`),
     callout('idea', `<p>It is how you learn to read fast. At first you spell out c-a-t; after seeing “cat” a few hundred times, it is one glance. Rare words you still sound out in chunks. BPE does the same by counting.</p>`),
-    player({ id: 'bpe', track: false, key: `${s.sentence}|${mergesN}`, scene: bpeScene({
-      initial: bpe.initial, merges: bpe.merges, steps: bpe.steps,
-      idle: `Press play to learn the merges from your text, one at a time. ▁ marks the start of a word; “${WORD_START}t” (t starting a word) and “t” (t inside a word) are different symbols.`,
+    player({ id: 'bpe', track: false, key: `corpus|${tok.merges}`, scene: bpeScene({
+      initial: bpe.initial, merges: bpe.merges, steps: bpe.steps, corpusWords, totalMerges: bpe.merges.length,
+      idle: `Press play to watch the first ${BPE_PLAYER_STEPS} of the ${bpe.merges.length} merges being learned from the corpus. Each step first lights up every place the winning pair occurs, then glues it. ▁ marks the start of a word; “${WORD_START}t” (t starting a word) and “t” (t inside a word) are different symbols.`,
     }) }),
-    el('p', { class: 'fig-caption', text: `Merges stop when no pair occurs at least twice${bpe.merges.length < mergesN ? ` (after ${bpe.merges.length} here)` : ` or after ${mergesN}`}. Your text is ${chars} characters, ${words.length} words, and ${d.tokens.length} tokens.` }),
-    prose(`<p>With the merges learned, tokenising is mechanical: cut every word into characters and apply the merges in order. Each token also gets a <strong>position</strong>, 0 for the first, 1 for the second, and so on. Hold on to that; it matters in Chapter 2.</p>`),
+    prose(`<p>With the merges learned, tokenising is mechanical: cut every word into characters and apply the ${bpe.merges.length} merges in order. Your text is ${chars} characters, ${words.length} words, and ${d.tokens.length} tokens. Each token also gets a <strong>position</strong>, 0 for the first, 1 for the second, and so on. Hold on to that; it matters in Chapter 2.</p>`),
     player({ id: 'tokens', scene: tokenizeScene({ sentence: s.sentence, tokens: d.tokens, win, idle: `Press play to scan the sentence and pull out one token at a time${win.partial ? ` (positions ${win.start}–${win.end - 1}; slide the lens for the rest)` : ''}.` }) }),
+    tokeniseAnything(cut),
+    strawberryCallout(cut),
   ]);
 
   const numbering = lesson('Step two: give every piece a number', [

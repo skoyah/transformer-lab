@@ -19,8 +19,8 @@ export const DEFAULTS = {
   hidden: 8,
   learningRate: 0.1,
   causal: true,
-  tokenizer: 'bpe',   // the one tokenizer in the book: byte-pair-encoding subwords learned from the text
-  merges: 50,
+  tokenizer: 'bpe',   // the one tokenizer in the book: byte-pair-encoding subwords learned from the corpus
+  merges: 300,
 };
 
 export const DIM_OPTIONS = [2, 3, 4, 6, 8];
@@ -30,7 +30,7 @@ export const LENS_SIZES = [8, 12, 16, 24];
 
 // Why a text cannot be used, or null if it is fine.
 export function sentenceProblem(text) {
-  const n = tokenize(text || '', { ...tokenizerOf(state), trainingText: text }).length;
+  const n = tokenize(text || '', tokenizerOf(state)).length;
   if (n === 0) return 'Type at least one word.';
   if (n > MAX_TOKENS) return `That is ${n} tokens — the cap is ${MAX_TOKENS}. Long texts are fine: the tables show a window of positions you can slide.`;
   return null;
@@ -60,7 +60,7 @@ function initWeights({ seed, dim, hidden, vocabSize, positions }) {
 
 export function createExperiment(overrides = {}) {
   const opts = { ...DEFAULTS, ...overrides };
-  const tokens = tokenize(opts.sentence, { scheme: opts.tokenizer, merges: opts.merges, trainingText: opts.sentence });
+  const tokens = tokenize(opts.sentence, tokenizerOf({ config: { merges: opts.merges }, sentence: opts.sentence }));
   const vocab = extendVocab([], tokens);
   const tokenIds = tokensToIds(tokens, vocab);
   return {
@@ -138,10 +138,10 @@ setTimeout(() => { lastCommitted = experimentOnly(); }, 0);
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
 if (!state.progress) state.progress = {};
 if (!state.view) state.view = { start: 0, size: 12 };
-// Older saves used whole words or another scheme: move them to BPE and re-tokenise.
-if (state.config.tokenizer !== 'bpe' || !state.config.merges) {
+// Older saves used whole words, or merges learned from the sentence: re-tokenise with the corpus merges.
+if (state.config.tokenizer !== 'bpe' || state.config.merges !== 300) {
   state.config.tokenizer = 'bpe';
-  state.config.merges = 50;
+  state.config.merges = 300;
   const tokens = tokenize(state.sentence, tokenizerOf(state));
   state.vocab = extendVocab(state.vocab, tokens);
   state.tokenIds = tokensToIds(tokens, state.vocab);
@@ -280,7 +280,7 @@ if (typeof window !== 'undefined') {
 export function setSentence(text) {
   const sentence = String(text ?? '').trim();
   if (sentence === state.sentence) return null;
-  const tokens = tokenize(sentence, { ...tokenizerOf(state), trainingText: sentence });
+  const tokens = tokenize(sentence, tokenizerOf(state));
   if (tokens.length === 0 || tokens.length > MAX_TOKENS) return null;
   state.sentence = sentence;
   delete state.notice;
