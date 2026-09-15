@@ -52,6 +52,17 @@ function promptIds(s, words) {
   return words.filter((w) => s.vocab.includes(w)).map((w) => s.vocab.indexOf(w));
 }
 
+// Where the prompt occurs in the training text, the words that follow it
+// there are what a memorising model "should" write next.
+function expectedContinuation(s, ids) {
+  if (!ids.length) return null;
+  const t = s.tokenIds;
+  for (let i = 0; i + ids.length <= t.length; i++) {
+    if (ids.every((id, j) => t[i + j] === id)) return t.slice(i + ids.length).map((id) => s.vocab[id]);
+  }
+  return null;
+}
+
 function suggestionBar(model, ids, label) {
   if (ids.length === 0) return el('div', { class: 'keyboard' }, [el('span', { class: 'note', text: 'Type a word the model knows…' })]);
   const d = forwardIds(model, ids);
@@ -63,19 +74,27 @@ function suggestionBar(model, ids, label) {
   }, [model.vocab[t.id], el('small', { text: pct(t.p) })])));
 }
 
-function generateScene(model, ids, pg, out) {
+function generateScene(model, ids, pg, out, expected = null) {
   const n = out.length;
   return {
     total: n,
     frame(k) {
+      const verdict = (i) => (expected && i < expected.length ? (out[i].token === expected[i] ? 'ok' : 'miss') : '');
       const chips = [
         ...ids.map((id) => el('span', { class: 'chip prompt', text: model.vocab[id] })),
-        ...out.slice(0, k).map((g, i) => el('span', { class: `chip gen ${i === k - 1 ? 'pulse' : ''}`, style: `--conf:${g.prob.toFixed(2)}`, title: `${pct(g.prob, 1)} sure` }, [g.token, el('small', { text: pct(g.prob) })])),
+        ...out.slice(0, k).map((g, i) => el('span', { class: `chip gen ${i === k - 1 ? 'pulse' : ''} ${verdict(i)}`, style: `--conf:${g.prob.toFixed(2)}`, title: `${pct(g.prob, 1)} sure` }, [g.token, el('small', { text: pct(g.prob) })])),
         ...out.slice(k).map(() => el('span', { class: 'chip gen todo', text: '…' })),
       ];
-      const body = el('div', { class: 'chips' }, chips);
+      const ghost = expected && expected.length ? el('div', { class: 'ghost-text' }, [
+        el('span', { class: 'lbl', text: 'in your text:' }),
+        ...ids.map((id) => el('span', { class: 'g prompt', text: model.vocab[id] })),
+        ...expected.slice(0, Math.max(n, 1) + 2).map((w, i) => el('span', { class: `g ${i < k ? (out[i] && out[i].token === w ? 'ok' : 'miss') : ''}`, text: w })),
+        expected.length > n + 2 ? el('span', { class: 'g', text: '…' }) : null,
+      ]) : null;
+      const hits = expected ? out.slice(0, k).filter((g, i) => expected[i] === g.token).length : 0;
+      const body = el('div', { class: 'stack' }, [el('div', { class: 'chips' }, chips), ghost]);
       if (ids.length === 0) return { body, caption: 'Type a word the model knows to give it something to continue.' };
-      if (!k) return { body, caption: `Press play to let it write ${n} word${n > 1 ? 's' : ''}, one at a time.` };
+      if (!k) return { body, caption: `Press play to let it write ${n} word${n > 1 ? 's' : ''}, one at a time.${expected ? ' The grey line shows how your training text actually continues.' : ''}` };
       const g = out[k - 1];
       const ctx = g.context.map((id) => model.vocab[id]);
       const bars = el('div', { class: 'bars' }, ctx.map((w, j) => el('div', { class: 'barrow' }, [
@@ -86,7 +105,7 @@ function generateScene(model, ids, pg, out) {
       const bets = topK(g.probs, 4).map((t) => `${model.vocab[t.id]} ${pct(t.p)}`).join(' · ');
       return {
         body,
-        caption: `Word <b>${k}</b>: run the whole block on “${esc(ctx.join(' '))}”, take the last position's bet — <b>“${esc(g.token)}”</b> at ${pct(g.prob)}${pg.temperature > 0 ? ' (drawn from the bets, not always the favourite)' : ''} — and append it.` + (k === n ? ' <span class="done-mark">Done.</span>' : ''),
+        caption: `Word <b>${k}</b>: run the whole block on “${esc(ctx.join(' '))}”, take the last position's bet — <b>“${esc(g.token)}”</b> at ${pct(g.prob)}${pg.temperature > 0 ? ' (drawn from the bets, not always the favourite)' : ''} — and append it.` + (k === n ? ` <span class="done-mark">Done.</span>${expected ? ` ${hits} of ${Math.min(n, expected.length)} match your text.` : ''}` : ''),
         worked: el('div', { class: 'trace' }, [
           el('p', { class: 'fig-caption', style: 'margin:0 0 .4rem', text: 'What the last position listened to (Chapter 3, live):' }),
           attentionArcs({ tokens: ctx, rows: [{ i: ctx.length - 1, w: g.attention }], focus: ctx.length - 1 }),
@@ -98,16 +117,27 @@ function generateScene(model, ids, pg, out) {
   };
 }
 
+// e^surprise ≈ how many words the model is effectively choosing between.
+function plausibleGauge(model) {
+  const V = model.vocab.length;
+  const eff = Math.min(V, Math.exp(lossOf(model)));
+  const w = Math.max(3, (Math.log(eff) / Math.log(Math.max(V, 2))) * 100);
+  return el('div', { class: 'gauge', title: `e^surprise = ${eff.toFixed(2)} of ${V} words` }, [
+    el('span', { class: 'gauge-track' }, el('span', { class: 'gauge-fill', style: `width:${w.toFixed(1)}%` })),
+    el('span', { class: 'gauge-lbl', text: `hesitating between ≈ ${eff < 10 ? eff.toFixed(1) : Math.round(eff)} of ${V} words` }),
+  ]);
+}
+
 function modelCard(title, sub, model, ids, pg, which) {
   return el('div', { class: `card model ${which}` }, [
-    el('div', { class: 'model-head' }, [el('h3', { style: 'margin:0', text: title }), el('span', { class: 'fig-caption', style: 'margin:0', text: sub })]),
+    el('div', { class: 'model-head' }, [el('h3', { style: 'margin:0', text: title }), el('span', { class: 'fig-caption', style: 'margin:0', text: sub }), plausibleGauge(model)]),
     el('div', { class: 'sub', text: 'Next-word suggestions' }),
     suggestionBar(model, ids, which),
     el('div', { class: 'sub', text: 'Let it write' }),
     player({
       id: `gen-${which}`, track: false,
       key: JSON.stringify([ids, pg.steps, pg.temperature, rerolls, model.updatedAt, model.trainingHistory.length, which === 'yours' ? checkpoint : null]),
-      scene: generateScene(model, ids, pg, generate(model, ids, { steps: pg.steps, temperature: pg.temperature, seed: rerolls })),
+      scene: generateScene(model, ids, pg, generate(model, ids, { steps: pg.steps, temperature: pg.temperature, seed: rerolls }), expectedContinuation(model, ids)),
     }),
   ]);
 }

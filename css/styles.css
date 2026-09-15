@@ -427,3 +427,16 @@ table.matrix td.flash { animation: cellflash 1s ease-out; }
 .timeline-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-family: var(--sans); margin-bottom: .4rem; }
 .timeline-ticks { display: flex; justify-content: space-between; font: 11px/1 var(--sans); color: var(--muted); margin-top: .2rem; }
 .card.timeline input[type=range] { width: 100%; }
+
+/* ---------- ghost text + gauge ---------- */
+.ghost-text { display: flex; flex-wrap: wrap; gap: .3rem .45rem; align-items: baseline; font-family: var(--serif); font-size: 1rem; color: var(--muted); }
+.ghost-text .lbl { font: 11px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; margin-right: .2rem; }
+.ghost-text .g { opacity: .55; }
+.ghost-text .g.prompt { opacity: .35; }
+.ghost-text .g.ok { opacity: 1; color: var(--accent); font-weight: 600; }
+.ghost-text .g.miss { opacity: 1; color: var(--warm); text-decoration: line-through; }
+.chip.gen.ok { border-color: var(--accent); }
+.chip.gen.miss { border-color: color-mix(in srgb, var(--warm) 60%, var(--line-strong)); }
+.gauge { display: flex; align-items: center; gap: .5rem; margin-top: .35rem; font: 12px/1 var(--sans); color: var(--muted); }
+.gauge-track { flex: 0 0 110px; height: 7px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.gauge-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--warm)); border-radius: 4px; transition: width .5s; }
