@@ -173,7 +173,16 @@ if (typeof window !== 'undefined') {
     if (e.key !== STORAGE_KEY || !e.newValue) return;
     const incoming = readStorage();
     if (!incoming) return;
+    // Which top-level keys actually differ? Preference-only changes (progress,
+    // playground, animation, …) are quiet; anything touching the model recalculates.
+    const changedKeys = Object.keys({ ...state, ...incoming }).filter((k) => k !== 'updatedAt' && JSON.stringify(state[k]) !== JSON.stringify(incoming[k]));
     state = incoming;
+    const QUIET = new Set(['progress', 'playground', 'animation', 'currentStep', 'snapshots', 'learningRate', 'handEdited']);
+    if (changedKeys.length && changedKeys.every((k) => QUIET.has(k))) {
+      const event = { changedKeys, affected: [], state, quiet: true, external: true };
+      for (const fn of listeners) fn(event);
+      return;
+    }
     dirty = new Set(STAGE_IDS);
     const event = { changedKeys: ['*'], affected: STAGE_IDS.slice(), state, external: true };
     for (const fn of listeners) fn(event);

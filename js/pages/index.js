@@ -4,7 +4,8 @@ import {
   setAnimation, resetExperiment, saveSnapshot, loadSnapshot, deleteSnapshot, exportSnapshot,
   importSnapshot, DIM_OPTIONS, HIDDEN_OPTIONS,
 } from '../state.js';
-import { initPage, bindRender, el, fmt, pct, esc, lesson, prose, callout, CHAPTERS } from '../ui.js';
+import { initPage, bindRender, el, fmt, pct, esc, lesson, prose, callout, flowDiagram, CHAPTERS } from '../ui.js';
+import { onChange } from '../state.js';
 
 const arrivedFrom = getExperiment().currentStep;
 initPage('index.html');
@@ -61,6 +62,19 @@ function howToRead() {
         <li><span class="tag derived">recomputed</span> — everything else. These are never stored; they are recalculated from the inputs whenever something upstream changes, like formulas in a spreadsheet.</li>
       </ul>`),
     callout('idea', `<p>Think of a spreadsheet. A few cells hold typed-in values; every other cell is a formula. Change one input and the dependent cells have to be recalculated. This model is exactly that — except here you turn the crank yourself: edit a weight, and the panel in the corner lists which stages are waiting for you to press play.</p>`),
+  ]);
+}
+
+let lastDone = new Set(Object.keys(getExperiment().progress || {}));
+
+function machinePanel() {
+  const s = getExperiment();
+  const nowDone = new Set(Object.keys(s.progress || {}));
+  const justDone = new Set([...nowDone].filter((id) => !lastDone.has(id)));
+  lastDone = nowDone;
+  return lesson('The machine', [
+    prose(`<p>Every stage of the model, wired the way the maths is wired: straight links feed the next stage, dotted arcs are the longer connections (the residual paths that carry the original input forward, the transposed K, the values V). Orange labels are the saved inputs each stage reads. Filled dots have been played; play a stage in any tab and its dot fills in here.</p>`),
+    el('div', { class: 'card flush flow-wrap' }, flowDiagram({ progress: s.progress, justDone, chapters: CHAPTERS })),
   ]);
 }
 
@@ -178,7 +192,12 @@ function snapshotsPanel() {
 }
 
 function render() {
-  content.replaceChildren(heroPanel(), howToRead(), tocPanel(), settingsPanel(), snapshotsPanel());
+  content.replaceChildren(heroPanel(), howToRead(), machinePanel(), tocPanel(), settingsPanel(), snapshotsPanel());
 }
+
+// Progress changes (this tab or another) only need the diagram and list refreshed.
+onChange((event) => {
+  if (event.quiet && event.changedKeys.includes('progress')) render();
+});
 
 bindRender(render, { quietKeys: ['snapshots'] });

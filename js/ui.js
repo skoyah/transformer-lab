@@ -547,3 +547,70 @@ export function normStrip({ values, labels, stepMs = 1300, eps = 1e-5 }) {
   });
   return svg;
 }
+
+// ---------------------------------------------------------------------------
+// Flow diagram of the whole machine, generated from STAGES: nodes on a
+// baseline in pipeline order, straight links for "previous stage" inputs,
+// arcs for longer-range ones (residual paths, Kᵀ, V), chapter brackets below.
+// Filled nodes have been played; `justDone` nodes pulse.
+// ---------------------------------------------------------------------------
+
+export function flowDiagram({ progress = {}, justDone = new Set(), chapters = [] } = {}) {
+  const n = STAGES.length;
+  const gap = 54, padL = 30, padR = 30, W = padL + padR + gap * (n - 1), H = 205, y = 100;
+  const x = (i) => padL + i * gap;
+  const idx = Object.fromEntries(STAGES.map((s, i) => [s.id, i]));
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'flow');
+  const add = (tag, attrs, parent = svg) => {
+    const node = document.createElementNS(svgNS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    parent.append(node);
+    return node;
+  };
+  const defs = add('defs', {});
+  const marker = add('marker', { id: 'flow-head', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 6, markerHeight: 6, markerUnits: 'userSpaceOnUse', orient: 'auto' }, defs);
+  add('path', { d: 'M0,0 L8,4 L0,8 z', fill: 'currentColor' }, marker);
+
+  // chapter brackets
+  let start = 0;
+  for (let i = 1; i <= n; i++) {
+    if (i === n || STAGES[i].page !== STAGES[start].page) {
+      const ch = chapters.find((c) => c.href === STAGES[start].page);
+      const x1 = x(start) - 14, x2 = x(i - 1) + 14;
+      add('path', { d: `M${x1},${y + 44} v6 h${x2 - x1} v-6`, class: 'bracket' });
+      const t = add('text', { x: (x1 + x2) / 2, y: y + 64, 'text-anchor': 'middle', class: 'chapter' });
+      t.textContent = ch ? `${ch.n} · ${ch.label}` : '';
+      start = i;
+    }
+  }
+  // links
+  STAGES.forEach((stage, i) => {
+    for (const dep of stage.deps) {
+      const j = idx[dep];
+      if (j === i - 1) {
+        add('line', { x1: x(j) + 8, x2: x(i) - 9, y1: y, y2: y, class: 'link', 'marker-end': 'url(#flow-head)' });
+      } else {
+        const lift = 18 + (i - j) * 9;
+        add('path', { d: `M${x(j)},${y - 8} Q${(x(j) + x(i)) / 2},${y - lift} ${x(i)},${y - 9}`, class: 'link arc', 'marker-end': 'url(#flow-head)' });
+      }
+    }
+  });
+  // nodes
+  STAGES.forEach((stage, i) => {
+    const done = progress[stage.id] === 'done';
+    const g = add('g', { class: `node ${done ? 'done' : ''} ${justDone.has(stage.id) ? 'just' : ''}`, transform: `translate(${x(i)},${y})` });
+    const a = add('a', { href: `${stage.page}#${stage.id}` }, g);
+    add('circle', { r: 8 }, a);
+    add('title', {}, a).textContent = `${stage.label}${done ? ' — played' : ' — waiting for play'}`;
+    const label = add('text', { x: 0, y: 22, 'text-anchor': 'middle', class: 'lbl' }, a);
+    label.textContent = stage.label.replace('Positional input X', 'Pos. input').replace('Attention scores', 'Scores').replace('Attention output', 'Attn out').replace('Probabilities', 'Probs');
+    if (stage.inputs.length) {
+      const t = add('text', { x: 0, y: 34, 'text-anchor': 'middle', class: 'inp' }, a);
+      t.textContent = stage.inputs.map((k) => k.replace('weights.', '').replace('config.', '').replace('embedding', 'E').replace('positional', 'P')).join(' ');
+    }
+  });
+  return svg;
+}
