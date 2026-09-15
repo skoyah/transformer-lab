@@ -128,4 +128,4 @@ function render() {
   content.replaceChildren(chapterControls(STAGES_HERE), why, lenses, scoring, tidy, softmax, collect, chapterNav('attention.html'));
 }
 
-bindRender(render, { quietKeys: ['progress'] });
+bindRender(render);

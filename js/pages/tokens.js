@@ -44,4 +44,4 @@ function render() {
   content.replaceChildren(chapterControls(STAGES_HERE), intro, chopping, numbering, chapterNav('tokens.html'));
 }
 
-bindRender(render, { quietKeys: ['progress'] });
+bindRender(render);

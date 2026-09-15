@@ -81,4 +81,4 @@ function render() {
   content.replaceChildren(chapterControls(STAGES_HERE), location, lookup, positions, x, chapterNav('embeddings.html'));
 }
 
-bindRender(render, { quietKeys: ['progress'] });
+bindRender(render);

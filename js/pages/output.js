@@ -124,4 +124,4 @@ function render() {
   content.replaceChildren(chapterControls(STAGES_HERE), scoring, betting, learning, chapterNav('output.html'));
 }
 
-bindRender(render, { quietKeys: ['progress'] });
+bindRender(render);

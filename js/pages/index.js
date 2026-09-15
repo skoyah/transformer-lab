@@ -181,4 +181,4 @@ function render() {
   content.replaceChildren(heroPanel(), howToRead(), tocPanel(), settingsPanel(), snapshotsPanel());
 }
 
-bindRender(render, { quietKeys: ['snapshots', 'progress'] });
+bindRender(render, { quietKeys: ['snapshots'] });

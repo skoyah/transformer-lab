@@ -127,4 +127,4 @@ function render() {
   content.replaceChildren(chapterControls(STAGES_HERE), residual, norm, think, again, chapterNav('ffn.html'));
 }
 
-bindRender(render, { quietKeys: ['progress'] });
+bindRender(render);

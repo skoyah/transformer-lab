@@ -74,7 +74,10 @@ function renderInto(root, id) {
   root.style.position = 'relative';
   const animate = p.animateNext;
   p.animateNext = false;
+  // A newer render supersedes any animation this one scheduled.
+  const gen = (p.gen = (p.gen || 0) + 1);
   setTimeout(() => {
+    if (p.gen !== gen || !root.isConnected) return;
     moveHighlights(root, overlay);
     if (animate) {
       animateStep(root, speedMs());
@@ -106,13 +109,13 @@ function bindCellRefs(root) {
 
 // Helper for scene-specific animations: a ghost copy of `from` flies to `to`.
 export function flyGhost(root, from, to, { duration = 450, text = null, onLand = null, hideTarget = true, className = '' } = {}) {
-  if (reducedMotion() || !from || !to) { onLand && onLand(); return; }
-  const rr = root.getBoundingClientRect();
-  const a = from.getBoundingClientRect();
-  const b = to.getBoundingClientRect();
+  if (!from || !to || !from.isConnected || !to.isConnected) return; // superseded by a newer render
+  if (reducedMotion()) { onLand && onLand(); return; }
+  const a = layoutRect(from, root);
+  const b = layoutRect(to, root);
   const ghost = el('div', { class: `ghost-fly ${className}`, text: text ?? from.textContent });
   const cs = getComputedStyle(from);
-  ghost.style.cssText = `left:${a.left - rr.left}px; top:${a.top - rr.top}px; min-width:${a.width}px; height:${a.height}px; font:${cs.font}; color:${cs.color}; background:${cs.backgroundColor}; border-radius:${cs.borderRadius}; padding:${cs.padding}; box-sizing:border-box`;
+  ghost.style.cssText = `left:${a.left}px; top:${a.top}px; min-width:${a.width}px; height:${a.height}px; font:${cs.font}; color:${cs.color}; background:${cs.backgroundColor}; border-radius:${cs.borderRadius}; padding:${cs.padding}; box-sizing:border-box`;
   root.style.position = 'relative';
   root.append(ghost);
   if (hideTarget) to.style.visibility = 'hidden';
@@ -120,11 +123,18 @@ export function flyGhost(root, from, to, { duration = 450, text = null, onLand =
     { transform: 'translate(0,0)', opacity: 1 },
     { transform: `translate(${b.left - a.left}px, ${b.top - a.top}px)`, opacity: 0.9 },
   ], { duration, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
-  anim.onfinish = () => {
+  let landed = false;
+  const land = () => {
+    if (landed) return;
+    landed = true;
     ghost.remove();
     if (to.isConnected) { to.style.visibility = ''; to.classList.remove('pulse'); void to.offsetWidth; to.classList.add('pulse'); }
     onLand && onLand();
+    if (root.isConnected) moveHighlights(root);
   };
+  anim.onfinish = land;
+  // Safety net: a hidden tab pauses animations; never leave the target hidden.
+  setTimeout(land, duration + 800);
   return ghost;
 }
 
@@ -134,39 +144,56 @@ export function flyGhost(root, from, to, { duration = 450, text = null, onLand =
 // of being redrawn — the "cursor" glides from cell to cell.
 // ---------------------------------------------------------------------------
 
-function unionRect(cells) {
+// Layout position of a node relative to the player root, ignoring CSS
+// transforms (pop/scale animations would otherwise skew measurements) and
+// accounting for scrolled containers in between.
+function layoutRect(node, root) {
+  let left = 0, top = 0, n = node;
+  while (n && n !== root) {
+    left += n.offsetLeft; top += n.offsetTop;
+    const parent = n.offsetParent;
+    let a = n.parentElement;
+    while (a && a !== parent && a !== root) { left -= a.scrollLeft; top -= a.scrollTop; a = a.parentElement; }
+    if (a === root && parent !== root) { /* root reached through a non-positioned chain */ }
+    n = parent;
+  }
+  return { left, top, width: node.offsetWidth, height: node.offsetHeight };
+}
+
+function unionRect(cells, root) {
   let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
   for (const c of cells) {
-    const q = c.getBoundingClientRect();
-    l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+    const q = layoutRect(c, root);
+    l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.left + q.width); b = Math.max(b, q.top + q.height);
   }
   return { left: l, top: t, width: r - l, height: b - t };
 }
 
-function moveHighlights(root, overlay) {
-  const rootRect = root.getBoundingClientRect();
+export function moveHighlights(root, overlay = root.querySelector(':scope > .hl-layer')) {
+  if (!overlay) return;
   const wanted = new Map(); // name -> { rect, kind }
   root.querySelectorAll('.player-stage table.matrix').forEach((table, t) => {
     const rows = [...table.querySelectorAll('td.hlrow')];
     const cols = [...table.querySelectorAll('td.hlcol')];
     const cell = table.querySelector('td.hlcell');
-    if (rows.length) wanted.set(`row-${t}`, { rect: unionRect(rows), kind: 'src' });
-    if (cols.length) wanted.set(`col-${t}`, { rect: unionRect(cols), kind: 'src' });
-    if (cell) wanted.set(`cell-${t}`, { rect: unionRect([cell]), kind: 'target' });
+    if (rows.length) wanted.set(`row-${t}`, { rect: unionRect(rows, root), kind: 'src' });
+    if (cols.length) wanted.set(`col-${t}`, { rect: unionRect(cols, root), kind: 'src' });
+    if (cell) wanted.set(`cell-${t}`, { rect: unionRect([cell], root), kind: 'target' });
   });
-  // Non-table highlights: the tokenizer's reading head and the current chip.
+  // Non-table highlights: the tokenizer's reading head and the current chip
+  // (only once the chip has landed — it is hidden while its ghost flies).
   const scan = root.querySelector('.sentence-scan .cur');
-  if (scan) wanted.set('scan', { rect: unionRect([scan]), kind: 'scan' });
+  if (scan) wanted.set('scan', { rect: unionRect([scan], root), kind: 'scan' });
   const chip = root.querySelector('.chips .chip.pulse');
-  if (chip) wanted.set('chip', { rect: unionRect([chip]), kind: 'chip' });
+  if (chip && chip.style.visibility !== 'hidden') wanted.set('chip', { rect: unionRect([chip], root), kind: 'chip' });
   for (const box of overlay.children) if (!wanted.has(box.dataset.name)) box.classList.add('off');
   for (const [name, { rect, kind }] of wanted) {
     let box = overlay.querySelector(`[data-name="${name}"]`);
     const fresh = !box;
     if (fresh) { box = el('div', { class: `hl-box ${kind}`, dataset: { name } }); overlay.append(box); }
     const place = () => {
-      box.style.left = `${rect.left - rootRect.left - 2}px`;
-      box.style.top = `${rect.top - rootRect.top - 2}px`;
+      box.style.left = `${rect.left - 2}px`;
+      box.style.top = `${rect.top - 2}px`;
       box.style.width = `${rect.width + 4}px`;
       box.style.height = `${rect.height + 4}px`;
     };
@@ -271,21 +298,20 @@ function animateStep(root, stepMs) {
       if (to) pairs.push([td, to]);
     }
   }
-  if (!pairs.length) return;
+  if (!pairs.length || !root.isConnected) return;
 
-  const rootRect = root.getBoundingClientRect();
-  const duration = Math.max(260, Math.min(700, stepMs * 0.38));
+  const duration = Math.max(180, Math.min(700, stepMs * 0.38));
   const stagger = Math.min(60, (stepMs * 0.25) / pairs.length);
   const targets = new Set(pairs.map(([, to]) => to));
   for (const to of targets) { to.classList.remove('pulse'); to.style.visibility = 'hidden'; }
   root.style.position = 'relative';
   const ghosts = [];
   pairs.forEach(([from, to], i) => {
-    const a = from.getBoundingClientRect();
-    const b = to.getBoundingClientRect();
+    const a = layoutRect(from, root);
+    const b = layoutRect(to, root);
     const ghost = el('div', { class: 'ghost-cell', text: from.textContent });
     const cs = getComputedStyle(from);
-    ghost.style.cssText = `left:${a.left - rootRect.left}px; top:${a.top - rootRect.top}px; width:${a.width}px; height:${a.height}px; background:${cs.backgroundColor}; font-size:${cs.fontSize}`;
+    ghost.style.cssText = `left:${a.left}px; top:${a.top}px; width:${a.width}px; height:${a.height}px; background:${cs.backgroundColor}; font-size:${cs.fontSize}`;
     root.append(ghost);
     ghosts.push(ghost);
     ghost.animate([
@@ -351,8 +377,19 @@ export function setStep(id, step) {
   const next = Math.max(0, Math.min(p.total, step));
   p.animateNext = next === p.step + 1;
   p.step = next;
-  if (p.track && p.step === p.total && getExperiment().progress[id] !== 'done') setProgress(id, 'done');
+  if (p.track && p.step === p.total && getExperiment().progress[id] !== 'done') {
+    setProgress(id, 'done');
+    updateChapterCount();
+  }
   refresh(id);
+}
+
+function updateChapterCount() {
+  const node = document.querySelector('.chapter-controls [data-count]');
+  if (!node) return;
+  const ids = node.dataset.count.split(',');
+  const s = getExperiment();
+  node.textContent = `${ids.filter((id) => s.progress[id] === 'done').length} of ${ids.length} stages played`;
 }
 
 export function play(id) {
@@ -415,6 +452,7 @@ export function resetSequence(ids) {
   for (const id of ids) { const p = players.get(id); if (p) p.step = 0; }
   clearProgress(ids);
   for (const id of ids) refresh(id);
+  updateChapterCount();
 }
 
 export function finishSequence(ids) {
@@ -430,7 +468,7 @@ export function chapterControls(ids) {
     el('button', { class: 'primary', html: `${icon('play')} Play this chapter`, onclick: () => playSequence(ids) }),
     el('button', { html: `${icon('end')} Reveal everything`, onclick: () => finishSequence(ids) }),
     el('button', { class: 'ghost', html: `${icon('start')} Reset chapter`, onclick: () => resetSequence(ids) }),
-    el('span', { class: 'fig-caption', style: 'margin:0', text: `${done} of ${ids.length} stages played` }),
+    el('span', { class: 'fig-caption', style: 'margin:0', dataset: { count: ids.join(',') }, text: `${done} of ${ids.length} stages played` }),
   ]);
 }
 
