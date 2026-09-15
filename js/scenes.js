@@ -20,18 +20,19 @@ export function cellRef(r, c, html) { return `<a class="cellref" href="#" data-c
 // C[i][j] = A[i] · B[:,j]  — one cell per step, row-major.
 export function matmulScene({
   A, B, C, aTitle, bTitle, cTitle, aRows, aCols, bCols, bByRow = false,
-  idle, tail = null, cHeat = 'diverging', cDecimals = 2, done,
+  idle, tail = null, cHeat = 'diverging', cDecimals = 2, done, extra = null,
 }) {
   const n = C.length;
   const m = C[0].length;
   const colOf = (j) => (bByRow ? B[j] : B.map((r) => r[j]));
+  const extraOf = (i, j) => (extra ? extra(i, j) : null);
   // Big tables step one row at a time so a player always finishes in a sitting.
   if (n * m > 240) return matmulRowScene({ A, B, C, aTitle, bTitle, cTitle, aRows, aCols, bCols, bByRow, idle, tail, cHeat, cDecimals, done, colOf });
   return {
     total: n * m,
     hover: (i, j) => ({
       sources: [{ table: 0, row: i }, bByRow ? { table: 1, row: j } : { table: 1, col: j }],
-      worked: dotExample(`${cTitle}[${i}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${i}]`, bName: `${bTitle}[${bByRow ? j : ':,' + j}]`, tail: tail ? tail(i, j) : '' }),
+      worked: dotExample(`${cTitle}[${aRows[i].replace(/^.* /, '')}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${aRows[i]}]`, bName: `${bTitle}[${bByRow ? bCols[j] : ':,' + bCols[j]}]`, tail: tail ? tail(i, j) : '', extra: extraOf(i, j) }),
     }),
     frame(k) {
       const idx = Math.min(k, n * m) - 1;
@@ -49,8 +50,8 @@ export function matmulScene({
       if (!k) return { body, caption: idle };
       const caption = `${cellRef(i, j, `<b>${cTitle}[${i}][${j}]</b>`)} — row “${esc(aRows[i])}” of ${aTitle} dotted with ${bByRow ? 'row' : 'column'} <b>${esc(bCols[j])}</b> of ${bTitle}.`
         + (k === n * m ? ` ${doneCaption(done || `All ${n}×${m} cells of ${cTitle} are computed.`)}` : '');
-      const extra = tail ? tail(i, j) : '';
-      return { body, caption, worked: dotExample(`${cTitle}[${i}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${i}]`, bName: `${bTitle}[${bByRow ? j : ':,' + j}]`, tail: extra }) };
+      const tailHtml = tail ? tail(i, j) : '';
+      return { body, caption, worked: dotExample(`${cTitle}[${aRows[i].replace(/^.* /, '')}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${aRows[i]}]`, bName: `${bTitle}[${bByRow ? bCols[j] : ':,' + bCols[j]}]`, tail: tailHtml, extra: extraOf(i, j) }) };
     },
   };
 }
@@ -130,16 +131,24 @@ export function lookupScene({ table, ids, tokens, output, idle, explain, done })
 
 // Sentence → tokens, one token per step. The reading head scans the token's
 // letters one by one (lower-casing them), then the token flies into its chip.
-export function tokenizeScene({ sentence, tokens, idle }) {
+export function tokenizeScene({ sentence, tokens, idle, win = null }) {
   const lower = sentence.toLowerCase();
   const spans = [];
   let cursor = 0;
   for (const t of tokens) {
-    const at = lower.indexOf(t, cursor);
-    spans.push([at, at + t.length]);
-    cursor = at + t.length;
+    // ▁ (word start) is not in the text: match the rest, skipping whitespace; a lone ▁ is a space.
+    const bare = t.replace(/^▁/, '');
+    let at;
+    if (bare === '') { at = lower.indexOf(' ', cursor); if (at < 0) at = cursor; spans.push([at, at + 1]); cursor = at + 1; continue; }
+    at = lower.indexOf(bare, cursor);
+    if (at < 0) at = cursor;
+    spans.push([at, at + bare.length]);
+    cursor = at + bare.length;
   }
-  const n = tokens.length;
+  // With a lens, only the window's tokens are stepped; earlier ones show as already seen.
+  const first = win ? win.start : 0;
+  const n = win ? win.size : tokens.length;
+  const cur = (k) => first + k - 1;
   return {
     total: n,
     frame(k) {
@@ -147,29 +156,36 @@ export function tokenizeScene({ sentence, tokens, idle }) {
       let pos = 0;
       spans.forEach(([a, b], i) => {
         if (a > pos) pieces.push(el('span', { class: 'gap', text: sentence.slice(pos, a) }));
-        if (i === k - 1) {
+        if (i === cur(k)) {
           const original = sentence.slice(a, b);
           pieces.push(el('span', { class: 'cur' }, [...original].map((ch, j) => {
             const lc = ch.toLowerCase();
             return el('span', { class: `ch ${ch !== lc ? 'lowercased' : ''}`, style: `--i:${j}`, dataset: { lc } }, ch);
           })));
         } else {
-          pieces.push(el('span', { class: i < k - 1 ? 'seen' : 'todo', text: i < k - 1 ? lower.slice(a, b) : sentence.slice(a, b) }));
+          const seen = i < cur(k) || (k === 0 && i < first);
+          pieces.push(el('span', { class: seen ? 'seen' : 'todo', text: seen ? lower.slice(a, b) : sentence.slice(a, b) }));
         }
         pos = b;
       });
       if (pos < sentence.length) pieces.push(el('span', { class: 'gap', text: sentence.slice(pos) }));
+      const shown = tokens.slice(first, first + k);
       const body = el('div', { class: 'stack' }, [
         el('div', { class: 'sentence-scan' }, [el('span', { class: 'head' }), ...pieces]),
-        el('div', { class: 'chips' }, tokens.slice(0, k).map((t, i) => el('span', { class: `chip ${i === k - 1 ? 'pulse' : ''}` }, [t, el('small', { text: `#${i}` })]))),
+        el('div', { class: 'chips' }, [
+          first > 0 ? el('span', { class: 'chip todo', text: `… ${first} earlier` }) : null,
+          ...shown.map((t, i) => el('span', { class: `chip ${i === k - 1 ? 'pulse' : ''}` }, [t, el('small', { text: `#${first + i}` })])),
+        ]),
       ]);
       if (!k) return { body, caption: idle };
-      const t = tokens[k - 1];
-      const kind = /^[a-z0-9']+$/.test(t) ? 'a word' : 'a punctuation mark';
-      const changedCase = sentence.slice(spans[k - 1][0], spans[k - 1][1]) !== t;
+      const g = cur(k);
+      const t = tokens[g];
+      const bare = t.replace(/^▁/, '');
+      const kind = t.startsWith('▁') ? (bare.length ? 'the start of a word (▁ marks it)' : 'a space') : /^[a-z0-9']+$/.test(t) ? (t.length === 1 ? 'a character' : 'a word') : 'a punctuation mark';
+      const changedCase = sentence.slice(spans[g][0], spans[g][1]) !== bare;
       return {
         body,
-        caption: `Token <b>#${k - 1}</b>: “${esc(t)}” — ${kind}${changedCase ? ', lower-cased' : ''}, at position ${k - 1}.` + (k === n ? ` ${doneCaption(`${n} tokens.`)}` : ''),
+        caption: `Token <b>#${g}</b>: “${esc(t)}” — ${kind}${changedCase ? ', lower-cased' : ''}, at position ${g}.` + (k === n ? ` ${doneCaption(`${tokens.length} tokens in total.`)}` : ''),
         animate(root, ms) {
           const cur = root.querySelector('.sentence-scan .cur');
           const chip = root.querySelector('.chips .chip.pulse');
@@ -192,7 +208,7 @@ export function tokenizeScene({ sentence, tokens, idle }) {
 
 // Tokens → IDs, one lookup per step: the token travels to its dictionary
 // row, and the ticket number travels back into the chip.
-export function idScene({ tokens, ids, vocab, idle }) {
+export function idScene({ tokens, ids, vocab, idle, offset = 0 }) {
   const n = tokens.length;
   return {
     total: n,
@@ -201,12 +217,15 @@ export function idScene({ tokens, ids, vocab, idle }) {
       const body = row([
         matrixTable({ title: 'The dictionary', matrix: vocab.map((w, id) => [id]), rowLabels: vocab, colLabels: ['ticket'], decimals: 0, heat: null, hlRow: k ? ids[i] : null, small: true }),
         op('→'),
-        el('div', { class: 'chips', style: 'align-self:center' }, tokens.map((t, idx) => el('span', { class: `chip arrow ${idx === i ? 'pulse' : ''} ${idx >= k ? 'todo' : ''}` }, [el('span', { class: 'w', text: t }), ' → ', el('b', { text: idx < k ? ids[idx] : '?' })]))),
+        el('div', { class: 'chips', style: 'align-self:center' }, [
+          offset > 0 ? el('span', { class: 'chip todo', text: `… ${offset} earlier` }) : null,
+          ...tokens.map((t, idx) => el('span', { class: `chip arrow ${idx === i ? 'pulse' : ''} ${idx >= k ? 'todo' : ''}`, title: `position ${offset + idx}` }, [el('span', { class: 'w', text: t }), ' → ', el('b', { text: idx < k ? ids[idx] : '?' })])),
+        ]),
       ]);
       if (!k) return { body, caption: idle };
       return {
         body,
-        caption: `“${esc(tokens[i])}” is ticket <b>${ids[i]}</b> in the dictionary.` + (k === n ? ` ${doneCaption(`The model now holds ${vec(ids, 0)} — and never sees the words again.`)}` : ''),
+        caption: `“${esc(tokens[i])}” (position ${offset + i}) is ticket <b>${ids[i]}</b> in the dictionary.` + (k === n ? ` ${doneCaption(`These positions now read ${vec(ids, 0)} — the model never sees the words again.`)}` : ''),
         animate(root, ms) {
           const chip = root.querySelector('.chips .chip.pulse');
           const wordEl = chip && chip.querySelector('.w');
@@ -245,8 +264,9 @@ export function transposeScene({ K, KT, tokens, dims, idle }) {
 }
 
 // Probabilities → prediction, one position per step.
-export function predictionScene({ probs, vocab, tokens, prediction, idle }) {
+export function predictionScene({ probs, vocab, tokens, prediction, idle, nextTokens = null, offset = 0 }) {
   const n = probs.length;
+  const nextOf = (r) => (nextTokens ? nextTokens[r] : (r + 1 < n ? tokens[r + 1] : null));
   return {
     total: n,
     frame(k) {
@@ -254,7 +274,7 @@ export function predictionScene({ probs, vocab, tokens, prediction, idle }) {
       const table = el('table', { class: 'pred' }, [
         el('thead', {}, el('tr', {}, ['after', 'bets on', 'how sure', 'actually next', ''].map((t) => el('th', { text: t })))),
         el('tbody', {}, prediction.map((p, r) => {
-          const actual = r + 1 < n ? tokens[r + 1] : null;
+          const actual = nextOf(r);
           const hit = actual != null && p.token === actual;
           const shown = r < k;
           return el('tr', { class: r === i ? 'hlrow' : '' }, [
@@ -273,9 +293,39 @@ export function predictionScene({ probs, vocab, tokens, prediction, idle }) {
       ]);
       if (!k) return { body, caption: idle };
       const p = prediction[i];
-      const actual = i + 1 < n ? tokens[i + 1] : null;
+      const actual = nextOf(i);
       const verdict = actual == null ? 'There is no next word in the text to check against.' : p.token === actual ? 'That is right.' : `The text actually continues with “${esc(actual)}”.`;
-      return { body, caption: `After “${esc(tokens[i])}”, the biggest number in the row is ${cellRef(i, p.id, `<b>${pct(p.prob)}</b>`)} for “${esc(p.token)}”. ${verdict}` + (k === n ? ` ${doneCaption('')}` : '') };
+      return { body, caption: `After “${esc(tokens[i])}” (position ${offset + i}), the biggest number in the row is ${cellRef(i, p.id, `<b>${pct(p.prob)}</b>`)} for “${esc(p.token)}”. ${verdict}` + (k === n ? ` ${doneCaption('')}` : '') };
+    },
+  };
+}
+
+// BPE learning, one merge per step: the text as symbols, the most frequent
+// adjacent pair found and merged, the sequence shrinking as it goes.
+export function bpeScene({ initial, merges, steps, idle, sampleWords = 40 }) {
+  const n = merges.length;
+  const render = (words, highlight) => el('div', { class: 'bpe-words' }, words.slice(0, sampleWords).map((syms) => el('span', { class: 'bpe-word' },
+    syms.map((sym) => el('span', { class: `sym ${highlight && sym === highlight ? 'just' : ''}`, text: sym })))).concat(words.length > sampleWords ? [el('span', { class: 'fig-caption', text: `… and ${words.length - sampleWords} more words` })] : []));
+  const countTokens = (words) => words.reduce((a, w) => a + w.length, 0);
+  const vocabOf = (words) => new Set(words.flat()).size;
+  return {
+    total: n,
+    frame(k) {
+      const words = k ? steps[k - 1] : initial;
+      const merge = k ? merges[k - 1] : null;
+      const body = el('div', { class: 'stack' }, [
+        render(words, merge && merge.result),
+        merge ? el('div', { class: 'bpe-pairs' }, [
+          el('span', { class: 'fig-caption', style: 'margin:0', text: 'Most frequent neighbouring pairs before this merge:' }),
+          ...merge.top.map(({ pair, count }) => el('span', { class: `pair ${pair[0] === merge.a && pair[1] === merge.b ? 'chosen' : ''}` }, [`${pair[0]} + ${pair[1]}`, el('small', { text: `×${count}` })])),
+        ]) : null,
+        el('div', { class: 'kpis small' }, [
+          el('div', {}, [el('b', { text: `${countTokens(words)}` }), el('span', { text: 'tokens in the text' })]),
+          el('div', {}, [el('b', { text: `${vocabOf(words)}` }), el('span', { text: 'distinct symbols' })]),
+        ]),
+      ]);
+      if (!k) return { body, caption: idle };
+      return { body, caption: `Merge <b>${k}</b>: “${esc(merge.a)}” + “${esc(merge.b)}” appear side by side <b>${merge.count}</b> times — more than any other pair — so they become one symbol, “${esc(merge.result)}”.` + (k === n ? ` ${doneCaption(`${n} merges learned. Real tokenizers learn tens of thousands from billions of words; the idea is exactly this.`)}` : '') };
     },
   };
 }

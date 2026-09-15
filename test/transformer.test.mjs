@@ -178,3 +178,38 @@ test('incremental numerical gradient matches a full recompute', async () => {
   }
   assert.ok(maxDiff < 1e-9, `max diff ${maxDiff}`);
 });
+
+test('tokenizers: chars and BPE', async () => {
+  const { tokenizeChars, learnBpe, applyBpe, tokenize, WORD_START } = await import('../js/transformer.js');
+  assert.deepEqual(tokenizeChars('the cat'), ['t', 'h', 'e', WORD_START, 'c', 'a', 't']);
+  const text = 'the cat sat on the mat the cat sat';
+  const { merges, steps, initial } = learnBpe(text, 5);
+  assert.ok(merges.length >= 3);
+  assert.equal(merges[0].count >= merges[1].count, true, 'most frequent pair first');
+  assert.ok(initial[0].join('') === WORD_START + 'the');
+  assert.equal(steps.length, merges.length);
+  const toks = applyBpe(text, merges);
+  assert.ok(toks.length < tokenizeChars(text).length, 'merges shorten the sequence');
+  assert.equal(toks.join('').replace(new RegExp(WORD_START, 'g'), ''), text.replace(/ /g, ''), 'no characters lost');
+  // unseen word still tokenises (falls back to smaller pieces)
+  const novel = tokenize('thematic', { scheme: 'bpe', merges: 5, trainingText: text });
+  assert.equal(novel.join('').replace(new RegExp(WORD_START, 'g'), ''), 'thematic');
+  // learning is deterministic
+  assert.deepEqual(learnBpe(text, 5).merges, merges);
+});
+
+test('backpropagation matches the numerical gradient', async () => {
+  const { gradients, numericalGradient, TRAINABLE } = await import('../js/transformer.js');
+  for (const overrides of [{}, { causal: false }, { sentence: 'the dog chased the cat . the cat ran', dim: 3, hidden: 4 }]) {
+    const s = createExperiment(overrides);
+    const a = gradients(s);
+    const b = numericalGradient(s);
+    let maxDiff = 0;
+    for (const name of TRAINABLE) {
+      const ga = a[name], gb = b[name];
+      const flat = (m) => (Array.isArray(m[0]) ? m.flat() : m);
+      flat(ga).forEach((v, i) => { maxDiff = Math.max(maxDiff, Math.abs(v - flat(gb)[i])); });
+    }
+    assert.ok(maxDiff < 1e-6, `${JSON.stringify(overrides)}: max diff ${maxDiff}`);
+  }
+});

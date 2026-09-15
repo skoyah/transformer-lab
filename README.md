@@ -25,7 +25,7 @@ ES modules need an HTTP origin; opening `index.html` via `file://` will not work
 ## Chapters
 
 0. Start here — your text, how to read, journey at a glance, settings, bookmarks
-1. Tokens · 2. Embeddings · 3. Attention · 4. Thinking (residual/norm/FFN) · 5. Predicting (+ training)
+1. Tokens (words / characters / BPE subwords) · 2. Embeddings · 3. Attention · 4. Thinking (residual/norm/FFN) · 5. Predicting (+ training)
 6. Put it to work — phone-keyboard next-word suggestions and autocomplete, fresh (untrained) model vs your trained model side by side
 
 ## Persistent vs derived
@@ -46,7 +46,9 @@ Snapshots store the persistent experiment only; loading one rebuilds the model a
 - Start page: a flow diagram generated from the dependency graph; the nav shows how many stages you have played. "Copy share link" packs the whole experiment into a URL; "Copy as NumPy" gives the weights and a forward pass as Python.
 - "Compare with the untrained model" toggles on E, the attention heatmap and Wout show which numbers training moved; Chapter 5 has a "nudge one number" widget (the gradient by hand) and the two-"the"s puzzle; Chapter 3 has attention presets; Chapter 4 lists what each hidden unit fires for.
 - Training runs in a Web Worker with an incremental-graph numerical gradient (a Wout nudge recomputes 3 stages, not 21).
-- Text is capped at 40 tokens; tables taller than ~26rem scroll inside their card and follow the row being computed.
+- Three tokenizers (saved): words, characters, or subwords learned by BPE from your own text — Chapter 1 has a player that performs the merges one at a time; prompts are tokenised the same way.
+- Training uses backpropagation (`gradients()` in transformer.js, tested against finite differences); the "nudge one number" widget still does the slow way for one weight.
+- Texts up to 2,000 tokens: the maths runs on all of it; tables show a sliding 8–24 position window (the lens), with an "earlier" column that gathers attention to positions before the window.
 
 ## Playback model
 

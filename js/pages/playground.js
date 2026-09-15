@@ -1,5 +1,5 @@
 import { tokenize, forwardIds, generate, topK, lossOf, trainStep } from '../transformer.js';
-import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, trainMany, MAX_PROMPT_TOKENS } from '../state.js';
+import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, trainMany, tokenizeLike, MAX_PROMPT_TOKENS } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs } from '../ui.js';
 import { player, groupControls } from '../player.js';
 import { worked } from '../scenes.js';
@@ -151,8 +151,8 @@ function render() {
   const d = getDerived();
   const pg = s.playground;
   const fresh = untrainedExperiment();
-  const words = tokenize(pg.prompt).slice(0, MAX_PROMPT_TOKENS);
-  const promptTooLong = tokenize(pg.prompt).length > MAX_PROMPT_TOKENS;
+  const words = tokenizeLike(pg.prompt).slice(0, MAX_PROMPT_TOKENS);
+  const promptTooLong = tokenizeLike(pg.prompt).length > MAX_PROMPT_TOKENS;
   const unknown = [...new Set(words.filter((w) => !s.vocab.includes(w)))];
   const ids = promptIds(s, words);
   const steps = s.trainingHistory.length;
@@ -171,6 +171,7 @@ function render() {
   const rerollBtn = el('button', { text: 'Different draw', onclick: () => { rerolls++; render(); }, disabled: pg.temperature <= 0 });
   const controls = el('div', { class: 'card' }, [
     el('label', {}, ['Your prompt (saved)', prompt]),
+    el('p', { class: 'fig-caption', style: 'margin-top:.4rem' }, [`Tokenised as (${s.config.tokenizer || 'words'}): `, ...words.map((w) => el('span', { class: 'chip', style: 'font-size:.9rem; padding:.1rem .5rem; margin-right:.25rem', text: w }))]),
     promptTooLong ? el('p', { class: 'fig-caption problem', style: 'margin-top:.6rem', text: `Only the first ${MAX_PROMPT_TOKENS} words of the prompt are used.` }) : null,
     unknown.length ? el('p', { class: 'fig-caption', style: 'margin-top:.6rem' }, [
       `The model has never seen ${unknown.map((w) => `“${w}”`).join(', ')} — those words are skipped. `,

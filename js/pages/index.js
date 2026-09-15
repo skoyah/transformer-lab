@@ -43,7 +43,7 @@ function heroPanel() {
   return el('div', { class: 'hero' }, [
     el('div', { class: 'card' }, [
       el('h3', { style: 'margin-top:0', text: 'Your text' }),
-      prose(`<p>Everything in this book is computed from this text. A sentence or two is plenty — the model is small and you'll want to read every number. Press Enter to apply.</p>`),
+      prose(`<p>Everything in this book is computed from this text. A sentence or two is the easiest to follow — the model is small and you'll want to read every number — but up to ${MAX_TOKENS} tokens work: the tables then show a window of positions you can slide. Press Enter to apply.</p>`),
       sentence,
       problem,
       el('p', { class: 'fig-caption', text: `${d.tokens.length} tokens (max ${MAX_TOKENS}) · ${s.vocab.length} words in the dictionary · ${s.config.dim} numbers per word` }),

@@ -514,3 +514,23 @@ table.matrix td.unmoved { opacity: .55; }
 .card.nudge .controls label { min-width: 5rem; }
 .card.nudge .worked { line-height: 2; }
 .fig-caption.problem { color: var(--warm); font-weight: 600; margin-top: .5rem; }
+
+/* ---------- BPE ---------- */
+.bpe-words { display: flex; flex-wrap: wrap; gap: .5rem .7rem; font-family: var(--mono); font-size: 13px; }
+.bpe-word { display: inline-flex; gap: 2px; }
+.bpe-word .sym { background: var(--bg); border: 1px solid var(--line-strong); border-radius: 4px; padding: .1rem .3rem; }
+.bpe-word .sym.just { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); animation: cellpop .5s ease-out; }
+.bpe-pairs { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; font-family: var(--mono); font-size: 12.5px; }
+.bpe-pairs .pair { border: 1px solid var(--line-strong); border-radius: 999px; padding: .15rem .55rem; background: var(--paper); }
+.bpe-pairs .pair.chosen { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.bpe-pairs .pair small { margin-left: .3rem; color: var(--muted); }
+.kpis.small b { font-size: 1.2rem; }
+.scheme-picker { display: flex; flex-wrap: wrap; gap: .5rem 1.2rem; align-items: center; }
+.scheme-picker label.inline { font-size: 14.5px; }
+.chip .ws, .sym .ws { color: var(--warm); }
+
+/* ---------- the lens ---------- */
+.lens { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: .6rem .9rem; margin: -1rem 0 1.6rem; font-family: var(--sans); box-shadow: var(--shadow); }
+.lens-label { font: 700 11.5px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.lens-range { font: 13px/1 var(--mono); color: var(--ink-soft); min-width: 12rem; }
+.lens select { font-size: 12.5px; padding: .25rem .4rem; }

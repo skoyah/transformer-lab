@@ -5,7 +5,7 @@
 
 import {
   STAGE_IDS, TRAINABLE, affectedStages, forward, trainStep as computeTrainStep,
-  tokenize, extendVocab, tokensToIds, seededMatrix, seededRow, sinusoidalPosition,
+  tokenize, tokenizeWords, tokenizerOf, extendVocab, tokensToIds, seededMatrix, seededRow, sinusoidalPosition,
   sinusoidalPositions, zeros,
 } from './transformer.js';
 
@@ -19,17 +19,20 @@ export const DEFAULTS = {
   hidden: 8,
   learningRate: 0.1,
   causal: true,
+  tokenizer: 'words',
+  merges: 20,
 };
 
 export const DIM_OPTIONS = [2, 3, 4, 6, 8];
-export const MAX_TOKENS = 40;      // keeps every table readable and every player finishable
-export const MAX_PROMPT_TOKENS = 24;
+export const MAX_TOKENS = 2000;    // the maths runs on the whole text; tables show a window (the lens)
+export const MAX_PROMPT_TOKENS = 64;
+export const LENS_SIZES = [8, 12, 16, 24];
 
 // Why a text cannot be used, or null if it is fine.
 export function sentenceProblem(text) {
-  const n = tokenize(text || '').length;
+  const n = tokenize(text || '', { ...tokenizerOf(state), trainingText: text }).length;
   if (n === 0) return 'Type at least one word.';
-  if (n > MAX_TOKENS) return `That is ${n} tokens — please keep it to ${MAX_TOKENS} or fewer. This is a book, not a data centre: every table has one row per token.`;
+  if (n > MAX_TOKENS) return `That is ${n} tokens — the cap is ${MAX_TOKENS}. Long texts are fine: the tables show a window of positions you can slide.`;
   return null;
 }
 export const HIDDEN_OPTIONS = [4, 8, 16];
@@ -57,7 +60,7 @@ function initWeights({ seed, dim, hidden, vocabSize, positions }) {
 
 export function createExperiment(overrides = {}) {
   const opts = { ...DEFAULTS, ...overrides };
-  const tokens = tokenize(opts.sentence);
+  const tokens = tokenize(opts.sentence, { scheme: opts.tokenizer, merges: opts.merges, trainingText: opts.sentence });
   const vocab = extendVocab([], tokens);
   const tokenIds = tokensToIds(tokens, vocab);
   return {
@@ -66,7 +69,7 @@ export function createExperiment(overrides = {}) {
     vocab,
     tokenIds,
     seed: opts.seed,
-    config: { dim: opts.dim, hidden: opts.hidden, causal: opts.causal },
+    config: { dim: opts.dim, hidden: opts.hidden, causal: opts.causal, tokenizer: opts.tokenizer, merges: opts.merges },
     learningRate: opts.learningRate,
     weights: initWeights({
       seed: opts.seed, dim: opts.dim, hidden: opts.hidden,
@@ -77,6 +80,7 @@ export function createExperiment(overrides = {}) {
     animation: { speed: 'normal' },
     progress: {},            // stageId -> 'done' once the reader has played it to the end
     playground: { prompt: 'the cat', steps: 4, temperature: 0 },
+    view: { start: 0, size: 12 },  // the lens: which positions the tables show
     currentStep: 'index.html',
     updatedAt: Date.now(),
   };
@@ -133,13 +137,15 @@ let state = readStorage() || createExperiment();
 setTimeout(() => { lastCommitted = experimentOnly(); }, 0);
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
 if (!state.progress) state.progress = {};
+if (!state.view) state.view = { start: 0, size: 12 };
+if (!state.config.tokenizer) { state.config.tokenizer = 'words'; state.config.merges = 20; }
 // Texts saved before the token cap existed: shorten them once, and say so.
 if (state.tokenIds.length > MAX_TOKENS) {
-  const kept = tokenize(state.sentence).slice(0, MAX_TOKENS);
+  const kept = tokenizeWords(state.sentence).slice(0, MAX_TOKENS);
   state.sentence = kept.join(' ');
   state.tokenIds = tokensToIds(kept, state.vocab);
   state.progress = {};
-  state.notice = `Your text had more than ${MAX_TOKENS} tokens, so it was shortened to the first ${MAX_TOKENS}. Every table has one row per token; keeping it short keeps the book readable.`;
+  state.notice = `Your text had more than ${MAX_TOKENS} tokens, so it was shortened to the first ${MAX_TOKENS}.`;
   writeStorage(state);
 }
 // Whatever was stored, every vocab entry and position must have its rows.
@@ -265,7 +271,7 @@ if (typeof window !== 'undefined') {
 export function setSentence(text) {
   const sentence = String(text ?? '').trim();
   if (sentence === state.sentence) return null;
-  const tokens = tokenize(sentence);
+  const tokens = tokenize(sentence, { ...tokenizerOf(state), trainingText: sentence });
   if (tokens.length === 0 || tokens.length > MAX_TOKENS) return null;
   state.sentence = sentence;
   delete state.notice;
@@ -337,6 +343,20 @@ export function setModelConfig({ seed, dim, hidden }) {
   return commit([...changed, 'weights'], { reinitialised: true });
 }
 
+// Switching tokenizer re-tokenises the text; vocab keeps growing, never renumbers.
+export function setTokenizer({ scheme, merges }) {
+  const next = { scheme: scheme ?? state.config.tokenizer ?? 'words', merges: merges ?? state.config.merges ?? 20 };
+  if (next.scheme === (state.config.tokenizer ?? 'words') && next.merges === (state.config.merges ?? 20)) return null;
+  state.config.tokenizer = next.scheme;
+  state.config.merges = next.merges;
+  const tokens = tokenize(state.sentence, tokenizerOf(state));
+  if (tokens.length > MAX_TOKENS) { state.config.tokenizer = 'words'; return null; }
+  state.vocab = extendVocab(state.vocab, tokens);
+  state.tokenIds = tokensToIds(tokens, state.vocab);
+  const grown = ensureCapacity(state);
+  return commit(['config.tokenizer', 'config.merges', 'vocab', 'tokenIds', ...grown]);
+}
+
 export function setCausal(flag) {
   const causal = Boolean(flag);
   if (causal === state.config.causal) return null;
@@ -364,6 +384,15 @@ export function clearProgress(stageIds) {
 export function setAnimation(prefs) {
   state.animation = { ...state.animation, ...prefs };
   commitQuiet(['animation']);
+}
+
+// The lens is a viewing preference: it never changes the model.
+export function setView(partial) {
+  state.view = { ...state.view, ...partial };
+  const n = state.tokenIds.length;
+  state.view.size = LENS_SIZES.includes(state.view.size) ? state.view.size : 12;
+  state.view.start = Math.max(0, Math.min(Math.max(0, n - state.view.size), Math.round(state.view.start || 0)));
+  commitQuiet(['view']);
 }
 
 export function setPlayground(partial) {
@@ -461,6 +490,9 @@ export function resetExperiment(overrides = {}) {
 // A model with the same text, dictionary and sizes but freshly rolled weights —
 // what the current model looked like before any editing or training. Fully
 // derived from (seed, config, vocab), so it is never stored.
+// Tokenise any text (a prompt) the way the current model tokenises its own.
+export function tokenizeLike(text) { return tokenize(text, tokenizerOf(state)); }
+
 export function untrainedExperiment() {
   return {
     ...state,

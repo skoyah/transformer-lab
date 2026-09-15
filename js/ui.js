@@ -3,7 +3,7 @@
 // worked examples and the "what just changed" panel. No maths lives here.
 
 import { STAGE_BY_ID, STAGES, shapeOf } from './transformer.js';
-import { getExperiment, onChange, setCurrentStep, undo, redo, setCoalescing } from './state.js';
+import { getExperiment, onChange, setCurrentStep, undo, redo, setCoalescing, setView, LENS_SIZES } from './state.js';
 
 export const CHAPTERS = [
   { href: 'index.html', n: 0, label: 'Start here', title: 'A transformer you can read' },
@@ -100,13 +100,16 @@ export function figure(stageId, children, cap) {
 export function op(symbol) { return el('span', { class: 'op', text: symbol }); }
 
 // Live worked example of one dot product: lhs = Σ a[i]·b[i].
-export function dotExample(lhs, a, b, { aName = 'a', bName = 'b', decimals = 2, tail = '' } = {}) {
+// extra: { label, value } — a contribution not shown term by term (e.g. positions outside the lens).
+export function dotExample(lhs, a, b, { aName = 'a', bName = 'b', decimals = 2, tail = '', extra = null } = {}) {
   const terms = a.map((x, i) => `<span class="term">(<b class="a">${fmt(x, decimals)}</b> × <b class="b">${fmt(b[i], decimals)}</b>)</span>`);
-  const result = a.reduce((acc, x, i) => acc + x * b[i], 0);
+  const partial = a.reduce((acc, x, i) => acc + x * b[i], 0);
+  const result = partial + (extra ? extra.value : 0);
+  const extraHtml = extra && Math.abs(extra.value) >= 0.0005 ? `<span class="eq">+</span><span class="term"><span class="a">${esc(extra.label)}</span> <b>${fmt(extra.value, decimals)}</b></span>` : '';
   return el('div', { class: 'worked', html:
     `<span class="lhs">${esc(lhs)}</span><span class="eq">=</span>` +
     `<span class="a">${esc(aName)}</span> · <span class="b">${esc(bName)}</span><span class="eq">=</span>` +
-    terms.join('<span class="eq">+</span>') +
+    terms.join('<span class="eq">+</span>') + extraHtml +
     `<span class="eq">=</span><span class="result">${fmt(result, decimals)}</span>${tail}` });
 }
 
@@ -705,4 +708,40 @@ export function flowDiagram({ progress = {}, justDone = new Set(), chapters = []
     }
   });
   return svg;
+}
+
+
+// ---------------------------------------------------------------------------
+// The lens: long texts are computed in full, but tables show a window of
+// positions [start, start+size). Pages slice their per-position matrices
+// with these helpers; the lens bar lets the reader slide the window.
+// ---------------------------------------------------------------------------
+
+export function windowOf(n) {
+  const v = getExperiment().view || { start: 0, size: 12 };
+  const size = Math.min(v.size || 12, n);
+  const start = Math.max(0, Math.min(v.start || 0, n - size));
+  const rows = Array.from({ length: size }, (_, i) => start + i);
+  return { start, end: start + size, size, n, rows, partial: n > size };
+}
+export const sliceRows = (m, win) => win.rows.map((i) => m[i]);
+export const sliceBoth = (m, win) => win.rows.map((i) => win.rows.map((j) => m[i][j]));
+export const sliceCols = (m, win) => m.map((r) => win.rows.map((j) => r[j]));
+export function tokenLabelsWin(tokens, win) { return win.rows.map((i) => `${tokens[i]} ${i}`); }
+
+export function lensBar(n) {
+  const win = windowOf(n);
+  if (!win.partial) return null;
+  const v = getExperiment().view;
+  const slider = el('input', { type: 'range', min: 0, max: n - win.size, value: win.start, 'aria-label': 'Window start', style: 'flex:1; min-width: 8rem',
+    oninput: (e) => setView({ start: Number(e.target.value) }) });
+  return el('div', { class: 'lens' }, [
+    el('span', { class: 'lens-label', text: 'Lens' }),
+    el('button', { class: 'pbtn', title: 'Earlier positions', html: '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M11 3 4 8l7 5z"/></svg>', disabled: win.start === 0, onclick: () => setView({ start: win.start - win.size }) }),
+    el('span', { class: 'lens-range', text: `positions ${win.start}–${win.end - 1} of ${n}` }),
+    el('button', { class: 'pbtn', title: 'Later positions', html: '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M5 3l7 5-7 5z"/></svg>', disabled: win.end >= n, onclick: () => setView({ start: win.start + win.size }) }),
+    slider,
+    el('select', { 'aria-label': 'Window size', onchange: (e) => setView({ size: Number(e.target.value) }) }, LENS_SIZES.map((k) => el('option', { value: k, text: `${k} at a time`, selected: k === v.size }))),
+    el('span', { class: 'fig-caption', style: 'margin:0; flex-basis:100%', text: 'Your text is longer than one screen of rows. The maths runs on all of it; the tables below show this window of positions.' }),
+  ]);
 }

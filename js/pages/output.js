@@ -1,6 +1,6 @@
 import { crossEntropy, lossOf, cloneWeights } from '../transformer.js';
 import { getExperiment, getDerived, setWeightCell, setWeights, setLearningRate, setCausal, train, trainStepAsync, trainMany, untrainedExperiment } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar } from '../ui.js';
 import { player, chapterControls, pauseAll, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, predictionScene, vec } from '../scenes.js';
 
@@ -48,9 +48,11 @@ function render() {
   const s = getExperiment();
   const d = getDerived();
   const dims = dimLabels(s.config.dim);
-  const toks = tokenLabels(d);
-  const loss = crossEntropy(d.probs, d.tokenIds);
   const n = d.tokens.length;
+  const win = windowOf(n);
+  const toks = tokenLabelsWin(d.tokens, win);
+  const W = (m) => sliceRows(m, win);
+  const loss = crossEntropy(d.probs, d.tokenIds);
   const hits = d.prediction.slice(0, n - 1).filter((p, i) => p.token === d.tokens[i + 1]).length;
   const vocabLabels = s.vocab;
   const fresh = compareOn() ? untrainedExperiment() : null;
@@ -86,7 +88,7 @@ function render() {
   const is1d = !Array.isArray(s.weights[nudgeName][0]);
   const nudgeBox = el('div', { class: 'card nudge' }, [
     el('strong', { style: 'font: 600 14px/1.3 var(--sans)', text: 'Nudge one number yourself' }),
-    el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .7rem', text: 'This is exactly what one training step does, for every number at once. Pick a weight; the model is re-run with it a hair higher and a hair lower.' }),
+    el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .7rem', text: 'The slow, honest way, for one number: the model is re-run with the weight a hair higher and a hair lower. Backpropagation gets the same slope for every number in one pass.' }),
     el('div', { class: 'controls' }, [
       el('label', {}, ['Table', el('select', { onchange: (e) => { nudge.name = e.target.value; nudge.r = 0; nudge.c = 0; render(); } }, names.map((k) => el('option', { value: k, text: k, selected: k === nudgeName })))]),
       is1d ? null : el('label', {}, ['Row', el('input', { type: 'number', min: 0, max: s.weights[nudgeName].length - 1, value: nr, onchange: (e) => { nudge.r = Math.max(0, Number(e.target.value) || 0); render(); } })]),
@@ -113,7 +115,7 @@ function render() {
       el('p', { class: 'fig-caption', text: 'Sometimes called the “unembedding”: it maps from coordinates back to words.' }),
     ]),
     player({ id: 'logits', scene: matmulScene({
-      A: d.norm2, B: s.weights.Wout, C: d.logits, aTitle: 'N₂', bTitle: 'Wout', cTitle: 'Scores', aRows: toks, aCols: dims, bCols: vocabLabels, bByRow: true,
+      A: W(d.norm2), B: s.weights.Wout, C: W(d.logits), aTitle: 'N₂', bTitle: 'Wout', cTitle: 'Scores', aRows: toks, aCols: dims, bCols: vocabLabels, bByRow: true,
       idle: 'Press play to score each candidate word at each position.',
       done: 'Row = the position we are standing at. Column = a candidate for the next word.',
     }) }),
@@ -122,21 +124,23 @@ function render() {
   const betting = lesson('Turn scores into a bet', [
     prose(`<p>Softmax again — the same move as in attention — turns each row of scores into probabilities that add up to 100%. Now the model is making a proper bet: “after this word, I'd put 40% on <em>sat</em>, 25% on <em>the</em>…”. The favourite is its prediction.</p>`),
     player({ id: 'probs', scene: rowScene({
-      inputs: [{ title: 'Scores', matrix: d.logits, rowLabels: toks, colLabels: vocabLabels }],
-      output: { title: 'Probabilities', matrix: d.probs, rowLabels: toks, colLabels: vocabLabels, heat: 'sequential', cornerLabel: 'after \\ word' },
+      inputs: [{ title: 'Scores', matrix: W(d.logits), rowLabels: toks, colLabels: vocabLabels }],
+      output: { title: 'Probabilities', matrix: W(d.probs), rowLabels: toks, colLabels: vocabLabels, heat: 'sequential', cornerLabel: 'after \\ word' },
       idle: 'Press play to turn each row of scores into a bet.',
       explain: (i) => {
-        const exps = d.logits[i].map((v) => Math.exp(v));
+        const g = win.rows[i];
+        const exps = d.logits[g].map((v) => Math.exp(v));
         const sum = exps.reduce((a, b) => a + b, 0);
+        const top = d.logits[g].map((v, j) => j).sort((a, b) => d.logits[g][b] - d.logits[g][a]).slice(0, 12);
         return {
-          caption: `Row <b>${i}</b> — after “${esc(d.tokens[i])}”: e to each score, divide by the total.`,
-          worked: `<span class="eq">e^scores =</span><span class="a">${vec(exps)}</span><span class="eq">sum =</span><b>${fmt(sum)}</b><span class="eq">bets =</span><span class="result">${vec(d.probs[i])}</span>`,
-          extra: softmaxBars({ labels: vocabLabels, scores: d.logits[i], stepMs: SPEEDS[s.animation.speed] || SPEEDS.normal }),
+          caption: `Row <b>${g}</b> — after “${esc(d.tokens[g])}”: e to each score, divide by the total.${s.vocab.length > 12 ? ' (Bars show the 12 strongest candidates.)' : ''}`,
+          worked: `<span class="eq">e^scores =</span><span class="a">${vec(exps.slice(0, 12))}${exps.length > 12 ? ' …' : ''}</span><span class="eq">sum =</span><b>${fmt(sum)}</b><span class="eq">bets =</span><span class="result">${vec(d.probs[g].slice(0, 12))}${exps.length > 12 ? ' …' : ''}</span>`,
+          extra: softmaxBars({ labels: top.map((j) => vocabLabels[j]), scores: top.map((j) => d.logits[g][j]), stepMs: SPEEDS[s.animation.speed] || SPEEDS.normal }),
         };
       },
       done: 'Rows sum to 1.',
     }) }),
-    player({ id: 'prediction', scene: predictionScene({ probs: d.probs, vocab: vocabLabels, tokens: d.tokens, prediction: d.prediction,
+    player({ id: 'prediction', scene: predictionScene({ probs: W(d.probs), vocab: vocabLabels, tokens: W(d.tokens), prediction: W(d.prediction), nextTokens: win.rows.map((g) => (g + 1 < n ? d.tokens[g + 1] : null)), offset: win.start,
       idle: 'Press play to pick the favourite at each position and check it against the text.' }) }),
     el('p', { class: 'fig-caption', text: `${hits} of ${n - 1} next words guessed right.${s.config.causal ? '' : ' Careful: “no peeking” is off, so the model can see the answer — turn it on in Chapter 3 for an honest test.'}` }),
     puzzleBox,
@@ -151,8 +155,9 @@ function render() {
   const learning = lesson('Teach it to bet better', [
     prose(`<p>How wrong is the model? We measure its <strong>surprise</strong>: for each position, take the probability it gave to the word that actually came next and ask “how unlikely did it think that was?” Give the right word 100% and surprise is 0; 50% is 0.69; 10% is 2.3; 1% is 4.6. (It's −log of the probability.) Averaged over the text, that single number is what training tries to push down. Its formal name is cross-entropy loss.</p>`),
     el('div', { class: 'worked', html: `<span class="lhs">surprise at position ${t}</span><span class="eq">=</span> −log P(“${esc(d.tokens[t + 1])}” after “${esc(d.tokens[t])}”) <span class="eq">=</span> −log <b>${fmt(pActual, 3)}</b> <span class="eq">=</span> <span class="result">${fmt(-Math.log(Math.max(pActual, 1e-12)))}</span> &nbsp; <span class="eq">— guessing evenly among ${s.vocab.length} words would be −log(1/${s.vocab.length}) = ${fmt(baseline)}</span>` }),
-    prose(`<p>Training is remarkably unglamorous. For every one of the ${paramCount} numbers in the weight tables, ask “if I nudged this up a hair, would surprise go up or down?” — then move it a small step the helpful way. The size of that step is the <strong>learning rate</strong>. Repeat.</p>`),
-    callout('idea', `<p>It's tuning an instrument with ${paramCount} pegs at once, by ear: turn each peg a fraction, keep it if the chord sounds better. Real models compute all the nudges in one clever pass (backpropagation); here we honestly try each one, which is fine when the model is tiny.</p>`),
+    prose(`<p>Training is remarkably unglamorous. For every one of the ${paramCount} numbers in the weight tables, ask “if I nudged this up a hair, would surprise go up or down?” — then move it a small step the helpful way. The size of that step is the <strong>learning rate</strong>. Repeat.</p>
+      <p>Trying every nudge one by one works but is slow (two full runs per number). There is a trick: the chain rule lets you get every slope from a <em>single</em> pass backwards through the stages — <strong>backpropagation</strong>. That is what the buttons below use. The widget after the analogy does it the slow way for one number, so you can see they agree.</p>`),
+    callout('idea', `<p>It's tuning an instrument with ${paramCount} pegs at once. Trying each peg by ear works; backpropagation is like knowing, from the way the chord sounds, which way every peg should turn — all at once, from one listen.</p>`),
     nudgeBox,
     el('div', { class: `card player ${training.running ? 'playing' : ''}`, dataset: { stage: 'training' } }, [
       el('div', { class: 'kpis' }, [
@@ -181,10 +186,10 @@ function render() {
       { label: 'Learning rate → 0.1', run: () => setLearningRate(0.1) },
     ]),
     callout('key', `<p>A language model is nothing more than “predict the next token”, trained by nudging weights to be less surprised by real text. Everything it appears to know is a side effect of getting good at that one game.</p>`),
-    underHood('loss = mean over t of −log P[t][ id[t+1] ]        w ← w − lr · ∂loss/∂w', `<p>Gradients here are central finite differences, (loss(w+ε) − loss(w−ε)) / 2ε, computed for every parameter. Slow but transparent — the whole forward pass is re-run for each nudge.</p>`),
+    underHood('loss = mean over t of −log P[t][ id[t+1] ]        w ← w − lr · ∂loss/∂w', `<p>Gradients come from backpropagation (js/transformer.js, <code>gradients()</code>): softmax + cross-entropy → output projection → layer norm → feed-forward → layer norm → attention (softmax, scaling, Q/K/V) → embeddings and positions, each block the exact reverse of its forward line. The test suite checks it against central finite differences, (loss(w+ε) − loss(w−ε)) / 2ε, to 1e-6.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), scoring, betting, learning, chapterNav('output.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), lensBar(n), scoring, betting, learning, chapterNav('output.html'));
 }
 
-bindRender(render);
+bindRender(render, { quietKeys: ['view'] });

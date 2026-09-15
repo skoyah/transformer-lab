@@ -77,51 +77,84 @@ export function matmul(A, B) {
 
 export function transpose(A) {
   if (A.length === 0) return [];
-  return A[0].map((_, j) => A.map((row) => row[j]));
+  const rows = A.length, cols = A[0].length;
+  const out = new Array(cols);
+  for (let j = 0; j < cols; j++) { const r = new Array(rows); for (let i = 0; i < rows; i++) r[i] = A[i][j]; out[j] = r; }
+  return out;
 }
 
+// The helpers below are written as plain loops: with a 2,000-token text the
+// attention tables have 4 million cells, and closure-per-cell code was slow.
 export function addMatrices(A, B) {
-  return A.map((row, i) => row.map((v, j) => v + B[i][j]));
+  const out = new Array(A.length);
+  for (let i = 0; i < A.length; i++) { const a = A[i], b = B[i], r = new Array(a.length); for (let j = 0; j < a.length; j++) r[j] = a[j] + b[j]; out[i] = r; }
+  return out;
 }
 
 export function addBias(A, b) {
-  return A.map((row) => row.map((v, j) => v + b[j]));
+  const out = new Array(A.length);
+  for (let i = 0; i < A.length; i++) { const a = A[i], r = new Array(a.length); for (let j = 0; j < a.length; j++) r[j] = a[j] + b[j]; out[i] = r; }
+  return out;
 }
 
 export function scaleMatrix(A, s) {
-  return A.map((row) => row.map((v) => v * s));
+  const out = new Array(A.length);
+  for (let i = 0; i < A.length; i++) { const a = A[i], r = new Array(a.length); for (let j = 0; j < a.length; j++) r[j] = a[j] * s; out[i] = r; }
+  return out;
 }
 
 export function relu(A) {
-  return A.map((row) => row.map((v) => (v > 0 ? v : 0)));
+  const out = new Array(A.length);
+  for (let i = 0; i < A.length; i++) { const a = A[i], r = new Array(a.length); for (let j = 0; j < a.length; j++) r[j] = a[j] > 0 ? a[j] : 0; out[i] = r; }
+  return out;
 }
 
 export function causalMask(A) {
   // Position i may only attend to positions <= i.
-  return A.map((row, i) => row.map((v, j) => (j > i ? -Infinity : v)));
+  const out = new Array(A.length);
+  for (let i = 0; i < A.length; i++) { const a = A[i], r = new Array(a.length); for (let j = 0; j < a.length; j++) r[j] = j > i ? -Infinity : a[j]; out[i] = r; }
+  return out;
+}
+
+// Scale and (optionally) mask in one pass — the hot path for long texts.
+export function scaleAndMask(A, s, causal) {
+  const out = new Array(A.length);
+  for (let i = 0; i < A.length; i++) {
+    const a = A[i], r = new Array(a.length);
+    for (let j = 0; j < a.length; j++) r[j] = causal && j > i ? -Infinity : a[j] * s;
+    out[i] = r;
+  }
+  return out;
 }
 
 export function softmaxRow(row) {
   let max = -Infinity;
-  for (const v of row) if (v > max) max = v;
-  if (max === -Infinity) return row.map(() => 0);
-  const exps = row.map((v) => (v === -Infinity ? 0 : Math.exp(v - max)));
-  const sum = exps.reduce((a, b) => a + b, 0);
-  return exps.map((e) => e / sum);
+  for (let j = 0; j < row.length; j++) if (row[j] > max) max = row[j];
+  const out = new Array(row.length);
+  if (max === -Infinity) { for (let j = 0; j < row.length; j++) out[j] = 0; return out; }
+  let sum = 0;
+  for (let j = 0; j < row.length; j++) { const e = row[j] === -Infinity ? 0 : Math.exp(row[j] - max); out[j] = e; sum += e; }
+  for (let j = 0; j < row.length; j++) out[j] /= sum;
+  return out;
 }
 
 export function softmaxRows(A) {
-  return A.map(softmaxRow);
+  const out = new Array(A.length);
+  for (let i = 0; i < A.length; i++) out[i] = softmaxRow(A[i]);
+  return out;
 }
 
 export function layerNorm(A, eps = 1e-5) {
-  return A.map((row) => {
-    const n = row.length;
-    const mean = row.reduce((a, b) => a + b, 0) / n;
-    const variance = row.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
-    const denom = Math.sqrt(variance + eps);
-    return row.map((v) => (v - mean) / denom);
-  });
+  const out = new Array(A.length);
+  for (let i = 0; i < A.length; i++) {
+    const row = A[i], n = row.length;
+    let mean = 0; for (let j = 0; j < n; j++) mean += row[j]; mean /= n;
+    let variance = 0; for (let j = 0; j < n; j++) { const dlt = row[j] - mean; variance += dlt * dlt; } variance /= n;
+    const inv = 1 / Math.sqrt(variance + eps);
+    const r = new Array(n); for (let j = 0; j < n; j++) r[j] = (row[j] - mean) * inv;
+    out[i] = r;
+  }
+  return out;
 }
 
 export function argmax(row) {
@@ -134,8 +167,104 @@ export function argmax(row) {
 // Tokens / vocabulary / positions
 // ---------------------------------------------------------------------------
 
-export function tokenize(sentence) {
+// ---------------------------------------------------------------------------
+// Tokenizers. Three schemes, chosen in state.config.tokenizer:
+//   words — lower-cased words, punctuation on its own (the simple default)
+//   chars — one token per character; a space becomes ▁
+//   bpe   — subwords: start from characters, repeatedly merge the most
+//           frequent adjacent pair (learned from the training text itself)
+// ▁ marks the start of a word in the chars/bpe schemes, as in SentencePiece.
+// ---------------------------------------------------------------------------
+
+export const TOKENIZERS = ['words', 'chars', 'bpe'];
+export const WORD_START = '▁';
+
+export function tokenizeWords(sentence) {
   return (sentence || '').toLowerCase().match(/[a-z0-9']+|[^\sa-z0-9']/g) || [];
+}
+
+export function tokenizeChars(sentence) {
+  const text = (sentence || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return [...text].map((c) => (c === ' ' ? WORD_START : c));
+}
+
+// Each word as a list of symbols, first symbol carrying the ▁ marker.
+function wordSymbols(sentence) {
+  return tokenizeWords(sentence).map((w) => [...w].map((c, i) => (i === 0 ? WORD_START + c : c)));
+}
+
+function pairCounts(words) {
+  const counts = new Map();
+  for (const syms of words) {
+    for (let i = 0; i + 1 < syms.length; i++) {
+      const key = syms[i] + '\u0000' + syms[i + 1];
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function mergePair(words, a, b) {
+  const joined = a + b;
+  return words.map((syms) => {
+    const out = [];
+    for (let i = 0; i < syms.length; i++) {
+      if (syms[i] === a && syms[i + 1] === b) { out.push(joined); i++; } else out.push(syms[i]);
+    }
+    return out;
+  });
+}
+
+// Learn up to `numMerges` merges from the text. Returns
+// { merges: [{ a, b, result, count }], steps: [words after each merge], initial }.
+// Deterministic: ties broken alphabetically. Stops when no pair occurs twice.
+export function learnBpe(sentence, numMerges) {
+  let words = wordSymbols(sentence);
+  const initial = words.map((w) => w.slice());
+  const merges = [];
+  const steps = [];
+  for (let m = 0; m < numMerges; m++) {
+    const counts = pairCounts(words);
+    let best = null;
+    for (const [key, count] of counts) {
+      if (count < 2) continue;
+      if (!best || count > best.count || (count === best.count && key < best.key)) best = { key, count };
+    }
+    if (!best) break;
+    const [a, b] = best.key.split('\u0000');
+    words = mergePair(words, a, b);
+    merges.push({ a, b, result: a + b, count: best.count, top: [...counts].filter(([, c]) => c >= 2).sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, 6).map(([k, c]) => ({ pair: k.split('\u0000'), count: c })) });
+    steps.push(words.map((w) => w.slice()));
+  }
+  return { merges, steps, initial };
+}
+
+// Apply learned merges, in order, to any text (prompts use the training text's merges).
+export function applyBpe(sentence, merges) {
+  let words = wordSymbols(sentence);
+  for (const { a, b } of merges) words = mergePair(words, a, b);
+  return words.flat();
+}
+
+const bpeCache = new Map();
+export function bpeFor(trainingText, numMerges) {
+  const key = `${numMerges}|${trainingText}`;
+  if (!bpeCache.has(key)) { bpeCache.clear(); bpeCache.set(key, learnBpe(trainingText, numMerges)); }
+  return bpeCache.get(key);
+}
+
+// tokenizer: { scheme, merges, trainingText } — trainingText is what BPE learns from.
+export function tokenize(sentence, tokenizer = null) {
+  const scheme = tokenizer && tokenizer.scheme ? tokenizer.scheme : 'words';
+  if (scheme === 'chars') return tokenizeChars(sentence);
+  if (scheme === 'bpe') return applyBpe(sentence, bpeFor(tokenizer.trainingText ?? sentence, tokenizer.merges ?? 20).merges);
+  return tokenizeWords(sentence);
+}
+
+// The tokenizer a state implies (BPE learns from the state's own text).
+export function tokenizerOf(state) {
+  const scheme = state.config && state.config.tokenizer ? state.config.tokenizer : 'words';
+  return { scheme, merges: state.config && state.config.merges != null ? state.config.merges : 20, trainingText: state.sentence };
 }
 
 // Existing vocabulary entries keep their IDs; unseen tokens are appended.
@@ -173,8 +302,8 @@ export const STAGES = [
   {
     id: 'tokens', label: 'Tokens', page: 'tokens.html',
     formula: 'tokenize(sentence)',
-    deps: [], inputs: ['sentence'],
-    compute: (s) => tokenize(s.sentence),
+    deps: [], inputs: ['sentence', 'config.tokenizer', 'config.merges'],
+    compute: (s) => tokenize(s.sentence, tokenizerOf(s)),
   },
   {
     id: 'tokenIds', label: 'Token IDs', page: 'tokens.html',
@@ -228,10 +357,7 @@ export const STAGES = [
     id: 'scaledScores', label: 'Scaled scores', page: 'attention.html',
     formula: 'S / √d  (+ causal mask)',
     deps: ['scores'], inputs: ['config.dim', 'config.causal'],
-    compute: (s, d) => {
-      const scaled = scaleMatrix(d.scores, 1 / Math.sqrt(s.config.dim));
-      return s.config.causal ? causalMask(scaled) : scaled;
-    },
+    compute: (s, d) => scaleAndMask(d.scores, 1 / Math.sqrt(s.config.dim), !!s.config.causal),
   },
   {
     id: 'attentionWeights', label: 'Softmax', page: 'attention.html',
@@ -434,9 +560,95 @@ export function numericalGradient(state, eps = 1e-4) {
   return grads;
 }
 
+// ---------------------------------------------------------------------------
+// Backpropagation: the same gradients as numericalGradient, computed exactly
+// in one backward pass (tested against it). Each block below is the reverse
+// of one line of the forward pass.
+// ---------------------------------------------------------------------------
+
+function zerosLike(m) { return Array.isArray(m[0]) ? m.map((r) => r.map(() => 0)) : m.map(() => 0); }
+function addInto(target, src) { for (let i = 0; i < target.length; i++) for (let j = 0; j < target[i].length; j++) target[i][j] += src[i][j]; }
+
+// y = (x − mean) / sqrt(var + eps), per row.  dx from dy.
+function layerNormBackward(rows, dOut, eps = 1e-5) {
+  return rows.map((row, i) => {
+    const n = row.length;
+    const mean = row.reduce((a, b) => a + b, 0) / n;
+    const variance = row.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+    const inv = 1 / Math.sqrt(variance + eps);
+    const y = row.map((v) => (v - mean) * inv);
+    const dy = dOut[i];
+    const meanDy = dy.reduce((a, b) => a + b, 0) / n;
+    const meanDyY = dy.reduce((a, b, k) => a + b * y[k], 0) / n;
+    return dy.map((g, k) => inv * (g - meanDy - y[k] * meanDyY));
+  });
+}
+
+export function gradients(state) {
+  const w = state.weights;
+  const d = forward(state);
+  const ids = d.tokenIds;
+  const n = ids.length;
+  const dim = state.config.dim;
+  const count = Math.max(1, n - 1);
+
+  // loss = mean_t −log P[t][ids[t+1]]  →  dLogits = (P − onehot) / count
+  const dLogits = d.probs.map((row, t) => (t < n - 1 ? row.map((p, v) => (p - (v === ids[t + 1] ? 1 : 0)) / count) : row.map(() => 0)));
+  // logits = N2 · Woutᵀ
+  const dWout = matmul(transpose(dLogits), d.norm2);
+  const dN2 = matmul(dLogits, w.Wout);
+  // N2 = LN(R2), R2 = N1 + F
+  const dR2 = layerNormBackward(d.residual2, dN2);
+  const dF = dR2;
+  const dN1 = dR2.map((r) => r.slice());
+  // F = H · W2 + b2
+  const dW2 = matmul(transpose(d.ffnHidden), dF);
+  const db2 = dF.reduce((acc, r) => acc.map((v, j) => v + r[j]), zeros(dim));
+  const dH = matmul(dF, transpose(w.W2));
+  // H = relu(N1 · W1 + b1)
+  const dHpre = dH.map((r, i) => r.map((g, j) => (d.ffnHidden[i][j] > 0 ? g : 0)));
+  const dW1 = matmul(transpose(d.norm1), dHpre);
+  const db1 = dHpre.reduce((acc, r) => acc.map((v, j) => v + r[j]), zeros(state.config.hidden));
+  addInto(dN1, matmul(dHpre, transpose(w.W1)));
+  // N1 = LN(R1), R1 = X + Z
+  const dR1 = layerNormBackward(d.residual1, dN1);
+  const dX = dR1.map((r) => r.slice());
+  const dZ = dR1;
+  // Z = A · V
+  const dA = matmul(dZ, transpose(d.V));
+  const dV = matmul(transpose(d.attentionWeights), dZ);
+  // A = softmax(S) per row (masked cells have A = 0, so their dS = 0)
+  const A = d.attentionWeights;
+  const dS = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = A[i], g = dA[i], r = new Array(n);
+    let dot = 0; for (let j = 0; j < n; j++) dot += g[j] * a[j];
+    for (let j = 0; j < n; j++) r[j] = a[j] * (g[j] - dot);
+    dS[i] = r;
+  }
+  // S = Q · Kᵀ / √d
+  const scale = 1 / Math.sqrt(dim);
+  const dQ = scaleMatrix(matmul(dS, d.K), scale);
+  const dK = scaleMatrix(matmul(transpose(dS), d.Q), scale);
+  // Q = X·Wq, K = X·Wk, V = X·Wv
+  const X = d.positionalInput;
+  const dWq = matmul(transpose(X), dQ);
+  const dWk = matmul(transpose(X), dK);
+  const dWv = matmul(transpose(X), dV);
+  addInto(dX, matmul(dQ, transpose(w.Wq)));
+  addInto(dX, matmul(dK, transpose(w.Wk)));
+  addInto(dX, matmul(dV, transpose(w.Wv)));
+  // X = E[ids] + P[pos]
+  const dE = zerosLike(w.embedding);
+  const dP = zerosLike(w.positional);
+  dX.forEach((row, t) => { for (let j = 0; j < dim; j++) { dE[ids[t]][j] += row[j]; dP[t][j] += row[j]; } });
+
+  return { embedding: dE, positional: dP, Wq: dWq, Wk: dWk, Wv: dWv, W1: dW1, b1: db1, W2: dW2, b2: db2, Wout: dWout, loss: crossEntropy(d.probs, ids) };
+}
+
 export function trainStep(state, learningRate) {
-  const lossBefore = lossOf(state);
-  const grads = numericalGradient(state);
+  const grads = gradients(state);
+  const lossBefore = grads.loss;
   const weights = cloneWeights(state.weights);
   let gradNorm = 0;
   forEachParam(weights, (row, c, name, r) => {

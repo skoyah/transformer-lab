@@ -1,5 +1,5 @@
 import { getExperiment, getDerived, setWeightCell, setWeights } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar } from '../ui.js';
 import { player, chapterControls, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, vec } from '../scenes.js';
 
@@ -7,22 +7,22 @@ initPage('ffn.html');
 const content = document.getElementById('content');
 const STAGES_HERE = ['residual1', 'norm1', 'ffnHidden', 'ffnOutput', 'residual2', 'norm2'];
 
-function layerNormExplain(input, output, tokens, dims, speed) {
+function layerNormExplain(input, output, tokens, dims, speed, offset = 0) {
   return (i) => {
     const r = input[i];
     const mean = r.reduce((a, b) => a + b, 0) / r.length;
     const variance = r.reduce((a, b) => a + (b - mean) ** 2, 0) / r.length;
     return {
-      caption: `Row <b>${i}</b> (“${esc(tokens[i])}”): subtract its average ${fmt(mean)}, divide by its spread ${fmt(Math.sqrt(variance + 1e-5))}.`,
+      caption: `Row <b>${offset + i}</b> (“${esc(tokens[i])}”): subtract its average ${fmt(mean)}, divide by its spread ${fmt(Math.sqrt(variance + 1e-5))}.`,
       worked: `<span class="a">${vec(r)}</span><span class="eq">− ${fmt(mean)}</span><span class="eq">÷ ${fmt(Math.sqrt(variance + 1e-5))}</span><span class="eq">=</span><span class="result">${vec(output[i])}</span>`,
       extra: normStrip({ values: r, labels: dims, stepMs: SPEEDS[speed] || SPEEDS.normal }),
     };
   };
 }
 
-function addExplain(aName, A, bName, B, C, tokens) {
+function addExplain(aName, A, bName, B, C, tokens, offset = 0) {
   return (i) => ({
-    caption: `Row <b>${i}</b> (“${esc(tokens[i])}”): ${aName} plus ${bName}, number by number.`,
+    caption: `Row <b>${offset + i}</b> (“${esc(tokens[i])}”): ${aName} plus ${bName}, number by number.`,
     worked: `<span class="a">${vec(A[i])}</span><span class="eq">+</span><span class="b">${vec(B[i])}</span><span class="eq">=</span><span class="result">${vec(C[i])}</span>`,
   });
 }
@@ -32,30 +32,34 @@ function render() {
   const d = getDerived();
   const dims = dimLabels(s.config.dim);
   const hid = dimLabels(s.config.hidden, 'h');
-  const toks = tokenLabels(d);
+  const n = d.tokens.length;
+  const win = windowOf(n);
+  const toks = tokenLabelsWin(d.tokens, win);
+  const W = (m) => sliceRows(m, win);
+  const wt = W(d.tokens);
 
   const residual = lesson('Keep the original, add what you heard', [
     prose(`<p>After attention, each word holds Z — a blend of other words' notes. But we don't want the word to <em>forget itself</em>. So instead of replacing X with Z, we add them: the word keeps its own row and gets the gathered information on top. This is called a <strong>residual connection</strong>, and it is one of the reasons deep networks are trainable at all.</p>`),
     callout('idea', `<p>It's editing with track changes rather than retyping the document. The original text stays; attention only has to propose the <em>changes</em>. Small, safe edits are much easier to learn than rewriting everything from scratch.</p>`),
     player({ id: 'residual1', scene: rowScene({
       inputs: [
-        { title: 'X (input)', matrix: d.positionalInput, rowLabels: toks, colLabels: dims },
-        { title: 'Z (attention)', matrix: d.attentionOutput, rowLabels: toks, colLabels: dims },
+        { title: 'X (input)', matrix: W(d.positionalInput), rowLabels: toks, colLabels: dims },
+        { title: 'Z (attention)', matrix: W(d.attentionOutput), rowLabels: toks, colLabels: dims },
       ],
       ops: ['+'],
-      output: { title: 'R₁', matrix: d.residual1, rowLabels: toks, colLabels: dims },
+      output: { title: 'R₁', matrix: W(d.residual1), rowLabels: toks, colLabels: dims },
       idle: 'Press play to add the attention output back onto the input, row by row.',
-      explain: addExplain('the original X', d.positionalInput, 'what attention gathered', d.attentionOutput, d.residual1, d.tokens),
+      explain: addExplain('the original X', W(d.positionalInput), 'what attention gathered', W(d.attentionOutput), W(d.residual1), wt, win.start),
     }) }),
   ]);
 
   const norm = lesson('Normalise the volume', [
     prose(`<p>Adding things together makes numbers drift: some rows end up loud, others quiet. Before the next step we standardise each row so it has an average of 0 and a typical spread of 1. This is <strong>layer normalisation</strong>. It removes each row's average and rescales its spread, which keeps every later stage working in a comfortable range.</p>`),
     player({ id: 'norm1', scene: rowScene({
-      inputs: [{ title: 'R₁', matrix: d.residual1, rowLabels: toks, colLabels: dims }],
-      output: { title: 'N₁ — normalised', matrix: d.norm1, rowLabels: toks, colLabels: dims },
+      inputs: [{ title: 'R₁', matrix: W(d.residual1), rowLabels: toks, colLabels: dims }],
+      output: { title: 'N₁ — normalised', matrix: W(d.norm1), rowLabels: toks, colLabels: dims },
       idle: 'Press play to normalise each row.',
-      explain: layerNormExplain(d.residual1, d.norm1, d.tokens, dims, s.animation.speed),
+      explain: layerNormExplain(W(d.residual1), W(d.norm1), wt, dims, s.animation.speed, win.start),
       done: 'Every row now averages 0 with spread 1.',
     }) }),
     underHood('N[i] = (R[i] − mean(R[i])) / sqrt(var(R[i]) + ε)', `<p>Done independently for each row. Real models also learn a scale and shift per column; we leave those out to keep the picture clean.</p>`),
@@ -82,11 +86,12 @@ function render() {
       el('p', { class: 'fig-caption', text: 'The feed-forward weights. In real models this block holds most of the parameters — it is where “knowledge” tends to live.' }),
     ]),
     player({ id: 'ffnHidden', scene: matmulScene({
-      A: d.norm1, B: s.weights.W1, C: d.ffnHidden, aTitle: 'N₁', bTitle: 'W₁', cTitle: 'H', aRows: toks, aCols: dims, bCols: hid,
+      A: W(d.norm1), B: s.weights.W1, C: W(d.ffnHidden), aTitle: 'N₁', bTitle: 'W₁', cTitle: 'H', aRows: toks, aCols: dims, bCols: hid,
       idle: 'Press play to expand each row: dot product, add the bias, then ReLU.',
       tail: (i, j) => {
-        const pre = d.norm1[i].reduce((acc, x, k) => acc + x * s.weights.W1[k][j], 0) + s.weights.b1[j];
-        return ` <span class="eq">+ b₁[${j}]</span> <b>${fmt(s.weights.b1[j])}</b> <span class="eq">= ${fmt(pre)} → ReLU →</span> <span class="result">${fmt(d.ffnHidden[i][j])}</span>${pre < 0 ? ' <span class="eq">(negative, so 0)</span>' : ''}`;
+        const g = win.rows[i];
+        const pre = d.norm1[g].reduce((acc, x, k) => acc + x * s.weights.W1[k][j], 0) + s.weights.b1[j];
+        return ` <span class="eq">+ b₁[${j}]</span> <b>${fmt(s.weights.b1[j])}</b> <span class="eq">= ${fmt(pre)} → ReLU →</span> <span class="result">${fmt(d.ffnHidden[g][j])}</span>${pre < 0 ? ' <span class="eq">(negative, so 0)</span>' : ''}`;
       },
       done: 'Zeros are where ReLU said no.',
     }) }),
@@ -95,16 +100,17 @@ function render() {
       el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .5rem', text: 'A hidden unit “fires” for a token when ReLU lets its value through. Untrained, this is noise; after training, units tend to specialise.' }),
       el('div', { class: 'fires-list' }, hid.map((h, j) => {
         const firing = d.tokens.map((t, i) => ({ t, v: d.ffnHidden[i][j] })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+        const shown = firing.slice(0, 8);
         return el('div', { class: 'fire' }, [
           el('code', { text: h }),
-          el('span', { text: firing.length ? ` fires for ${firing.map((x) => `${x.t} (${fmt(x.v, 1)})`).join(', ')}` : ' never fires for this text' }),
+          el('span', { text: firing.length ? ` fires for ${shown.map((x) => `${x.t} (${fmt(x.v, 1)})`).join(', ')}${firing.length > 8 ? ` … ${firing.length} positions in all` : ''}` : ' never fires for this text' }),
         ]);
       })),
     ]),
     player({ id: 'ffnOutput', scene: matmulScene({
-      A: d.ffnHidden, B: s.weights.W2, C: d.ffnOutput, aTitle: 'H', bTitle: 'W₂', cTitle: 'F', aRows: toks, aCols: hid, bCols: dims,
+      A: W(d.ffnHidden), B: s.weights.W2, C: W(d.ffnOutput), aTitle: 'H', bTitle: 'W₂', cTitle: 'F', aRows: toks, aCols: hid, bCols: dims,
       idle: 'Press play to squeeze each row back to the usual size.',
-      tail: (i, j) => ` <span class="eq">+ b₂[${j}]</span> <b>${fmt(s.weights.b2[j])}</b> <span class="eq">=</span> <span class="result">${fmt(d.ffnOutput[i][j])}</span>`,
+      tail: (i, j) => ` <span class="eq">+ b₂[${j}]</span> <b>${fmt(s.weights.b2[j])}</b> <span class="eq">=</span> <span class="result">${fmt(d.ffnOutput[win.rows[i]][j])}</span>`,
       done: 'F is each word\'s private thought, ready to be added back.',
     }) }),
   ]);
@@ -113,19 +119,19 @@ function render() {
     prose(`<p>Same trick as before. The thought F is added onto the row it came from, and the result is normalised. That's the end of one transformer <strong>block</strong>. Big models stack dozens of these; the output of one block is simply the X of the next.</p>`),
     player({ id: 'residual2', scene: rowScene({
       inputs: [
-        { title: 'N₁', matrix: d.norm1, rowLabels: toks, colLabels: dims },
-        { title: 'F', matrix: d.ffnOutput, rowLabels: toks, colLabels: dims },
+        { title: 'N₁', matrix: W(d.norm1), rowLabels: toks, colLabels: dims },
+        { title: 'F', matrix: W(d.ffnOutput), rowLabels: toks, colLabels: dims },
       ],
       ops: ['+'],
-      output: { title: 'R₂', matrix: d.residual2, rowLabels: toks, colLabels: dims },
+      output: { title: 'R₂', matrix: W(d.residual2), rowLabels: toks, colLabels: dims },
       idle: 'Press play to add the thought back onto the row it came from.',
-      explain: addExplain('N₁', d.norm1, 'the thought F', d.ffnOutput, d.residual2, d.tokens),
+      explain: addExplain('N₁', W(d.norm1), 'the thought F', W(d.ffnOutput), W(d.residual2), wt, win.start),
     }) }),
     player({ id: 'norm2', scene: rowScene({
-      inputs: [{ title: 'R₂', matrix: d.residual2, rowLabels: toks, colLabels: dims }],
-      output: { title: 'N₂ — the block\'s output', matrix: d.norm2, rowLabels: toks, colLabels: dims },
+      inputs: [{ title: 'R₂', matrix: W(d.residual2), rowLabels: toks, colLabels: dims }],
+      output: { title: 'N₂ — the block\'s output', matrix: W(d.norm2), rowLabels: toks, colLabels: dims },
       idle: 'Press play to normalise once more.',
-      explain: layerNormExplain(d.residual2, d.norm2, d.tokens, dims, s.animation.speed),
+      explain: layerNormExplain(W(d.residual2), W(d.norm2), wt, dims, s.animation.speed, win.start),
       done: 'One final vector per token. Chapter 5 turns these into predictions.',
     }) }),
     callout('try', `<ul>
@@ -138,7 +144,7 @@ function render() {
     callout('key', `<p>A transformer block is two moves, each wrapped in “add to the original and normalise”: <em>attention</em> (words exchange information) and <em>feed-forward</em> (each word processes it alone).</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), residual, norm, think, again, chapterNav('ffn.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), lensBar(n), residual, norm, think, again, chapterNav('ffn.html'));
 }
 
-bindRender(render);
+bindRender(render, { quietKeys: ['view'] });
