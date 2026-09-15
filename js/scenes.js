@@ -325,7 +325,7 @@ export function bpeScene({ initial, merges, steps, idle, sampleWords = 40 }) {
         ]),
       ]);
       if (!k) return { body, caption: idle };
-      return { body, caption: `Merge <b>${k}</b>: “${esc(merge.a)}” + “${esc(merge.b)}” appear side by side <b>${merge.count}</b> times — more than any other pair — so they become one symbol, “${esc(merge.result)}”.` + (k === n ? ` ${doneCaption(`${n} merges learned. Real tokenizers learn tens of thousands from billions of words; the idea is exactly this.`)}` : '') };
+      return { body, caption: `Merge <b>${k}</b>: “${esc(merge.a)}” + “${esc(merge.b)}” appear side by side <b>${merge.count}</b> times — more than any other pair — so they become one symbol, “${esc(merge.result)}”.` + (k === n ? ` ${doneCaption(`${n} merges learned. GPT-2 learned about 50,000 of these from 40 GB of web text; the procedure is exactly this.`)}` : '') };
     },
   };
 }

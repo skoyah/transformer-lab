@@ -83,7 +83,7 @@ function render() {
         matrixTable({ title: 'W₂ — squeeze', matrix: s.weights.W2, rowLabels: hid, colLabels: dims, editable: true, onEdit: (r, c, v) => setWeightCell('W2', r, c, v) }),
         matrixTable({ title: 'b₂', matrix: [s.weights.b2], rowLabels: ['bias'], colLabels: dims, editable: true, onEdit: (r, c, v) => setWeightCell('b2', r, c, v) }),
       ]),
-      el('p', { class: 'fig-caption', text: 'The feed-forward weights. In real models this block holds most of the parameters — it is where “knowledge” tends to live.' }),
+      el('p', { class: 'fig-caption', text: 'The feed-forward weights. In a standard transformer block the feed-forward part holds about two thirds of the block’s weights (8d² against 4d² for attention), and studies of what the network stores find much of its factual “knowledge” here.' }),
     ]),
     player({ id: 'ffnHidden', scene: matmulScene({
       A: W(d.norm1), B: s.weights.W1, C: W(d.ffnHidden), aTitle: 'N₁', bTitle: 'W₁', cTitle: 'H', aRows: toks, aCols: dims, bCols: hid,

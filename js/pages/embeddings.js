@@ -54,7 +54,7 @@ function render() {
         title: 'Position table P', matrix: s.weights.positional, rowLabels: s.weights.positional.map((_, i) => `pos ${i}`), colLabels: dims,
         editable: true, highlightRows: new Set(win.rows), onEdit: (r, c, v) => setWeightCell('positional', r, c, v),
       }),
-      el('p', { class: 'fig-caption', text: 'Starts as a wave pattern (sines and cosines of the position), which is what the original transformer used. Why waves? Any distinct pattern per position would do, but with sines the pattern for “two seats further along” looks the same wherever you are in the text, so the model can learn relative distances once and reuse them. Only the highlighted rows are needed for your text. Editable and saved like any weight.' }),
+      el('p', { class: 'fig-caption', text: 'Starts as a wave pattern (sines and cosines of the position), which is what the original transformer used. Why waves? Any distinct pattern per position would do; the original paper chose sines and cosines because moving k seats along turns each pair of coordinates by a fixed angle, the same anywhere in the text — so “k positions back” is one rule the model can learn once and reuse (Vaswani et al. 2017, §3.5). Only the highlighted rows are needed for your text. Editable and saved like any weight.' }),
     ]),
   ]);
 

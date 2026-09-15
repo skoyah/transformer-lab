@@ -39,7 +39,7 @@ function render() {
 
   const numbering = lesson('Step two: give every word a number', [
     prose(`<p>Next the model keeps a <strong>dictionary</strong>: every distinct word it has ever seen, with a number next to it. Turning the tokens into numbers is then just a lookup.</p>`),
-    callout('idea', `<p>It works like a coat check. Hand over a word, get a ticket number. Hand over the same word later and you get the <em>same</em> number — “the” is always ticket 0 in this dictionary, no matter where it appears.</p>`),
+    callout('idea', `<p>It works like a coat check. Hand over a word, get a ticket number. Hand over the same word later and you get the <em>same</em> number — “${esc(s.vocab[0])}” is always ticket 0 in this dictionary, no matter where it appears.</p>`),
     player({ id: 'tokenIds', scene: idScene({ tokens: sliceRows(d.tokens, win), ids: sliceRows(d.tokenIds, win), vocab: s.vocab, offset: win.start, idle: 'Press play to look each token up in the dictionary.' }) }),
     caption('Highlighted dictionary rows are words in your current text. Words from earlier texts keep their tickets.'),
     callout('try', `<ul>
@@ -67,13 +67,13 @@ function render() {
   const sample = 'tokenization';
   const sampleBpe = tokenize(sample, { scheme: 'bpe', merges: mergesN, trainingText: s.sentence });
   const notWords = lesson('Tokens are not always words', [
-    prose(`<p>Splitting on spaces is the simplest possible tokenizer, and it has two problems. A word the model has never seen is a dead end (there is no row for it). And the dictionary grows without bound — every spelling, every name, every typo needs its own ticket. Real models solve this by splitting text into <strong>pieces that are smaller than words but bigger than letters</strong>. “tokenization” might become “token” + “ization”; a rare name becomes a handful of fragments. Nothing is ever unknown, because in the worst case a word falls apart into single characters.</p>
-      <p>The standard way to decide the pieces is <strong>byte-pair encoding</strong> (BPE): start from characters, count which two neighbouring symbols occur together most often, glue them into one symbol, and repeat. Every merge is learned from the text. Try it on your own text below.</p>`),
+    prose(`<p>Splitting on spaces is the simplest possible tokenizer, and it has two problems. A word the model has never seen is a dead end (there is no row for it). And the dictionary grows without bound — every spelling, every name, every typo needs its own ticket. Real models solve this by splitting text into <strong>pieces</strong> that range from a single character up to a whole common word. “tokenization” might become “token” + “ization”; a rare name becomes a handful of fragments. A word is never a dead end, because in the worst case it falls apart into single characters — and GPT-style tokenizers go one step further and start from the 256 possible <em>bytes</em>, so that literally any text can be tokenised.</p>
+      <p>The most common way to decide the pieces is <strong>byte-pair encoding</strong> (BPE, Sennrich et al. 2016; the name comes from an older compression trick on bytes): start from the smallest units, count which two neighbouring symbols occur together most often, glue them into one new symbol, and repeat. Every merge is learned from the text. Ours starts from characters and merges only within words, like the original; other families exist (WordPiece in BERT, Unigram in T5), but they solve the same problem. Try it on your own text below.</p>`),
     el('div', { class: 'card' }, [
       el('div', { class: 'scheme-picker' }, [
         el('strong', { style: 'font: 600 13px/1 var(--sans); color: var(--muted); margin-right: .3rem', text: 'TOKENIZER (saved)' }),
         pick('words', 'Words', 'split on spaces'),
-        pick('chars', 'Characters', 'one token per letter, ▁ for a space'),
+        pick('chars', 'Characters', 'one token per character, ▁ for a space'),
         pick('bpe', 'Subwords (BPE)', `characters glued by ${mergesN} learned merges`),
         el('label', { class: 'inline' }, ['merges to learn', mergesInput]),
       ]),
@@ -83,11 +83,11 @@ function render() {
       initial: bpe.initial, merges: bpe.merges, steps: bpe.steps,
       idle: `Press play to learn the merges from your text, one at a time. ▁ marks the start of a word; “${WORD_START}t” and “t” are different symbols.`,
     }) }),
-    callout('key', `<p>A token is whatever the tokenizer says it is: a word, a character, or a learned fragment. Everything after this page works the same way regardless — it only ever sees the ticket numbers. Modern models use vocabularies of 50,000–200,000 such pieces, learned once from a huge corpus and then frozen.</p>`),
+    callout('key', `<p>A token is whatever the tokenizer says it is: a word, a character, or a learned fragment. Everything after this page works the same way regardless — it only ever sees the ticket numbers. Real vocabularies range from about 30,000 pieces (BERT) through 50,257 (GPT-2) and 128,000 (Llama 3) to 256,000 (Gemma), learned once from a huge corpus and then frozen.</p>`),
     callout('try', `<ul>
       <li>Switch to <strong>Characters</strong>: the sequence gets much longer, the dictionary tiny. Attention (Chapter 3) then has to work much harder to relate letters that belong together.</li>
       <li>Switch to <strong>Subwords</strong> and set merges to 0, 5, 20: watch the token count fall as common pairs get glued.</li>
-      <li>Put a word in your prompt (Chapter 6) that is not in the text — with subwords it still gets tokens; with words it is skipped.</li>
+      <li>Put a word in your prompt (Chapter 6) that is not in the text. With words it is skipped entirely; with subwords it is cut into pieces, and any piece that already has a ticket can be used — only pieces never seen before are skipped. (Ours learns from your text alone, so that happens more than it would with a tokenizer trained on the whole web.)</li>
     </ul>`, null, [
       { label: 'Use characters', run: () => setTokenizer({ scheme: 'chars' }), then: 'tokens' },
       { label: 'Use subwords (BPE)', run: () => setTokenizer({ scheme: 'bpe' }), then: 'bpe' },

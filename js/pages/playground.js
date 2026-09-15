@@ -160,7 +160,7 @@ function render() {
   const lossFresh = lossOf(fresh);
 
   const intro = lesson('The keyboard on your phone', [
-    prose(`<p>When you type a message and three suggested words appear above the keyboard, this is what happened: your words were turned into tokens, run through a model like the one in this book, and the top three bets came out. Chatbots do the same thing in a loop — pick a word, add it to the text, run again.</p>
+    prose(`<p>When you type a message and three suggested words appear above the keyboard, a language model made those bets: your words were turned into tokens, a model scored every word in its dictionary as the next one, and the top three came out. Keyboard models are small and vary in design, but that job — <em>score the next token</em> — is exactly the one in this book, and chatbots do it in a loop: pick a token, add it to the text, run again.</p>
       <p>Below, the exact model you have been reading about does both jobs. To make the difference visible, it runs twice: once with <strong>freshly rolled weights</strong> (the same random start you had before touching anything), and once with <strong>your current weights</strong>, ${steps ? `after ${steps} training step${steps > 1 ? 's' : ''}` : 'which you have not trained yet'}.</p>`),
     steps ? null : callout('try', `<p>You haven't trained the model yet, so both sides will look equally clueless. Press <strong>Train 25 steps</strong> below (or go to Chapter 5) and come back — that's the whole point of this page.</p>`),
   ]);

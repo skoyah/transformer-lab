@@ -60,9 +60,8 @@ function render() {
       el('p', { class: 'fig-caption', text: 'Edit a cell of Wq and only the question side needs replaying: Q, then the scores, then everything after. K and V keep their results.' }),
       el('div', { class: 'presets' }, [
         el('span', { class: 'fig-caption', style: 'margin:0', text: 'Presets to get a feel for the heatmap:' }),
-        el('button', { text: 'Attend to yourself', title: 'Wq = Wk = 3·I — every question matches its own badge best', onclick: () => setWeights({ Wq: identity(3), Wk: identity(3) }) }),
+        el('button', { text: 'Attend to yourself', title: 'Wq = Wk = 3·I — a question matches its own badge best (usually; two positions with similar rows can still tie)', onclick: () => setWeights({ Wq: identity(3), Wk: identity(3) }) }),
         el('button', { text: 'Attend evenly', title: 'Wq = 0 — every score is 0, so every visible word gets an equal share', onclick: () => setWeights({ Wq: identity(0) }) }),
-        el('button', { text: 'Attend to the previous word', title: 'Wq = 3·I, Wk = −3·I on a wave pattern tends to favour neighbours', onclick: () => setWeights({ Wq: identity(3), Wk: identity(-3) }) }),
         el('span', { class: 'fig-caption', style: 'margin:0', text: '⌘Z to undo.' }),
       ]),
     ]),
