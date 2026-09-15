@@ -156,8 +156,17 @@ const undoStack = [];
 const redoStack = [];
 let lastCommitted = null;
 
+// While a coalescing key is set (e.g. during a drag), consecutive commits
+// collapse into a single undo step.
+let coalesceKey = null;
+let lastCoalesce = null;
+export function setCoalescing(key) { coalesceKey = key; if (!key) lastCoalesce = null; }
+
 function rememberForUndo(extra) {
-  if (extra.undo || extra.redo) return;
+  if (extra.undo || extra.redo) { lastCoalesce = null; return; }
+  const skip = coalesceKey && coalesceKey === lastCoalesce;
+  lastCoalesce = coalesceKey;
+  if (skip) return;
   if (lastCommitted) {
     undoStack.push(lastCommitted);
     if (undoStack.length > UNDO_DEPTH) undoStack.shift();

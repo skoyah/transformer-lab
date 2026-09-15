@@ -3,7 +3,7 @@
 // worked examples and the "what just changed" panel. No maths lives here.
 
 import { STAGE_BY_ID, STAGES, shapeOf } from './transformer.js';
-import { getExperiment, onChange, setCurrentStep, undo, redo } from './state.js';
+import { getExperiment, onChange, setCurrentStep, undo, redo, setCoalescing } from './state.js';
 
 export const CHAPTERS = [
   { href: 'index.html', n: 0, label: 'Start here', title: 'A transformer you can read' },
@@ -265,6 +265,7 @@ export function matrixTable(opts) {
           },
           onfocus: (e) => e.target.select(),
           onkeydown: (e) => matrixKeys(e, r, c, v, decimals, onEdit),
+          onpointerdown: (e) => dragValue(e, r, c, v, decimals, onEdit),
         }));
       } else {
         td.textContent = fmt(v, decimals);
@@ -316,6 +317,45 @@ function matrixKeys(e, r, c, original, decimals, onEdit) {
     input.value = fmt(original, decimals);
     input.blur();
   }
+}
+
+// Drag a cell sideways to scrub its value (0.01 per pixel; Shift: 0.1).
+// Saves on every frame so downstream stages go idle live; a plain click
+// still focuses the input for typing.
+function dragValue(e, r, c, original, decimals, onEdit) {
+  if (e.button !== 0 || !onEdit) return;
+  const input = e.target;
+  const startX = e.clientX;
+  let dragging = false;
+  let value = Number(input.value.replace(',', '.'));
+  if (!Number.isFinite(value)) value = original;
+  let pending = false;
+  let latest = value;
+  const move = (ev) => {
+    const dx = ev.clientX - startX;
+    if (!dragging) {
+      if (Math.abs(dx) < 4) return;
+      dragging = true;
+      input.blur();
+      document.body.classList.add('scrubbing');
+      setCoalescing(`drag:${r},${c}:${Date.now()}`);
+    }
+    latest = Math.round((value + dx * (ev.shiftKey ? 0.1 : 0.01)) * 100) / 100;
+    if (pending) return;
+    pending = true;
+    setTimeout(() => { pending = false; onEdit(r, c, latest); }, 16);
+  };
+  const up = () => {
+    document.removeEventListener('pointermove', move);
+    document.removeEventListener('pointerup', up);
+    document.body.classList.remove('scrubbing');
+    if (dragging) setTimeout(() => {
+      setCoalescing(null);
+      const n = document.activeElement; if (n && n.tagName === 'INPUT' && n.closest('table.matrix')) n.blur();
+    }, 40);
+  };
+  document.addEventListener('pointermove', move);
+  document.addEventListener('pointerup', up);
 }
 
 export function tokenLabels(derived) {
