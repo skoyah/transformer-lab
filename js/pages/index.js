@@ -75,7 +75,7 @@ function machinePanel() {
   return lesson('The machine', [
     prose(`<p>Every stage of the model, wired the way the maths is wired: straight links feed the next stage, dotted arcs are the longer connections (the residual paths that carry the original input forward, the transposed K, the values V). Orange labels are the saved inputs each stage reads. Filled dots have been played; play a stage in any tab and its dot fills in here.</p>`),
     el('div', { class: 'card flush flow-wrap' }, flowDiagram({ progress: s.progress, justDone, chapters: CHAPTERS })),
-  ]);
+  ], { id: 'machine' });
 }
 
 function tocPanel() {

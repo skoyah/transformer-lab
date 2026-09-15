@@ -155,7 +155,7 @@ export function initPage(active) {
     if (s) s.textContent = `“${getExperiment().sentence}”`;
   };
   updateSentence();
-  mountMinimap(active);
+  mountMinimap();
   // Cmd/Ctrl-Z undoes the last model change (Shift for redo), even from inside a cell.
   document.addEventListener('keydown', (e) => {
     if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
@@ -175,33 +175,28 @@ export function initPage(active) {
 }
 
 // ---------------------------------------------------------------------------
-// Mini-map: one dot per stage in the sticky nav, filled once played, grouped
-// by chapter; the current chapter's group is underlined. Click a dot to jump.
+// Progress pill in the nav: "n of 21 stages played" with a thin bar. Links to
+// the machine diagram on the Start page.
 // ---------------------------------------------------------------------------
 
-function mountMinimap(active) {
+function mountMinimap() {
   const header = document.getElementById('nav');
   if (!header) return;
-  const groups = [];
-  for (const stage of STAGES) {
-    let g = groups[groups.length - 1];
-    if (!g || g.page !== stage.page) { g = { page: stage.page, stages: [] }; groups.push(g); }
-    g.stages.push(stage);
-  }
-  const map = el('div', { class: 'minimap', title: 'Stages: filled = played since its inputs last changed' }, groups.map((g) => el('span', { class: `mm-group ${g.page === active ? 'here' : ''}` },
-    g.stages.map((st) => el('a', { class: 'mm-dot', href: `${st.page}#${st.id}`, dataset: { stage: st.id }, title: st.label, 'aria-label': st.label })))));
-  const sentence = header.querySelector('.nav-sentence');
-  header.insertBefore(map, sentence);
+  const pill = el('a', { class: 'progress-pill', href: 'index.html#machine', title: 'Stages you have played since their inputs last changed. Click for the full map.' }, [
+    el('span', { class: 'bar' }, el('span', { class: 'fill' })),
+    el('span', { class: 'txt' }),
+  ]);
+  header.insertBefore(pill, header.querySelector('.nav-sentence'));
   updateMinimap();
 }
 
 function updateMinimap() {
+  const pill = document.querySelector('.progress-pill');
+  if (!pill) return;
   const progress = getExperiment().progress || {};
-  document.querySelectorAll('.minimap .mm-dot').forEach((dot) => {
-    const done = progress[dot.dataset.stage] === 'done';
-    if (done && !dot.classList.contains('done')) { dot.classList.add('done', 'just'); setTimeout(() => dot.classList.remove('just'), 900); }
-    else if (!done) dot.classList.remove('done');
-  });
+  const done = STAGES.filter((st) => progress[st.id] === 'done').length;
+  pill.querySelector('.fill').style.width = `${(done / STAGES.length) * 100}%`;
+  pill.querySelector('.txt').textContent = `${done} of ${STAGES.length} stages played`;
 }
 
 // ---------------------------------------------------------------------------
