@@ -19,8 +19,8 @@ export const DEFAULTS = {
   hidden: 8,
   learningRate: 0.1,
   causal: true,
-  tokenizer: 'words',
-  merges: 20,
+  tokenizer: 'bpe',   // the one tokenizer in the book: byte-pair-encoding subwords learned from the text
+  merges: 50,
 };
 
 export const DIM_OPTIONS = [2, 3, 4, 6, 8];
@@ -138,7 +138,16 @@ setTimeout(() => { lastCommitted = experimentOnly(); }, 0);
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
 if (!state.progress) state.progress = {};
 if (!state.view) state.view = { start: 0, size: 12 };
-if (!state.config.tokenizer) { state.config.tokenizer = 'words'; state.config.merges = 20; }
+// Older saves used whole words or another scheme: move them to BPE and re-tokenise.
+if (state.config.tokenizer !== 'bpe' || !state.config.merges) {
+  state.config.tokenizer = 'bpe';
+  state.config.merges = 50;
+  const tokens = tokenize(state.sentence, tokenizerOf(state));
+  state.vocab = extendVocab(state.vocab, tokens);
+  state.tokenIds = tokensToIds(tokens, state.vocab);
+  state.progress = {};
+  writeStorage(state);
+}
 // Texts saved before the token cap existed: shorten them once, and say so.
 if (state.tokenIds.length > MAX_TOKENS) {
   const kept = tokenizeWords(state.sentence).slice(0, MAX_TOKENS);

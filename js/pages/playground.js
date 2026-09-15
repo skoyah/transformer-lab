@@ -171,11 +171,11 @@ function render() {
   const rerollBtn = el('button', { text: 'Different draw', onclick: () => { rerolls++; render(); }, disabled: pg.temperature <= 0 });
   const controls = el('div', { class: 'card' }, [
     el('label', {}, ['Your prompt (saved)', prompt]),
-    el('p', { class: 'fig-caption', style: 'margin-top:.4rem' }, [`Tokenised as (${s.config.tokenizer || 'words'}): `, ...words.map((w) => el('span', { class: 'chip', style: 'font-size:.9rem; padding:.1rem .5rem; margin-right:.25rem', text: w }))]),
+    el('p', { class: 'fig-caption', style: 'margin-top:.4rem' }, ['Cut into pieces: ', ...words.map((w) => el('span', { class: 'chip', style: 'font-size:.9rem; padding:.1rem .5rem; margin-right:.25rem', text: w }))]),
     promptTooLong ? el('p', { class: 'fig-caption problem', style: 'margin-top:.6rem', text: `Only the first ${MAX_PROMPT_TOKENS} words of the prompt are used.` }) : null,
     unknown.length ? el('p', { class: 'fig-caption', style: 'margin-top:.6rem' }, [
-      `The model has never seen ${unknown.map((w) => `“${w}”`).join(', ')} — those words are skipped. `,
-      el('button', { class: 'ghost', style: 'color: var(--accent)', text: `Teach it ${unknown.length > 1 ? 'these words' : 'this word'} (random meaning)`, onclick: () => addWords(unknown) }),
+      `The model has never seen the piece${unknown.length > 1 ? 's' : ''} ${unknown.map((w) => `“${w}”`).join(', ')} — skipped. `,
+      el('button', { class: 'ghost', style: 'color: var(--accent)', text: `Give ${unknown.length > 1 ? 'these pieces' : 'this piece'} a ticket (random meaning)`, onclick: () => addWords(unknown) }),
     ]) : null,
     el('div', { class: 'controls', style: 'margin-top: .9rem' }, [
       el('label', {}, ['Words to write', stepsInput]),
@@ -252,7 +252,7 @@ function render() {
         ['Weights to learn', `${params.toLocaleString()}`, '~100,000,000,000+'],
         ['Training text', `${d.tokens.length} tokens`, '~10,000,000,000,000 tokens'],
         ['How gradients are found', 'backpropagation', 'backpropagation'],
-        ['Tokenizer', `${s.config.tokenizer || 'words'}${s.config.tokenizer === 'bpe' ? ` (${s.config.merges} merges)` : ''}`, 'subwords, 50,000–256,000 pieces'],
+        ['Tokenizer', `BPE, ${s.vocab.length} pieces`, 'BPE, 50,000–256,000 pieces'],
       ].map((r) => el('tr', {}, r.map((c, i) => el('td', { class: i === 0 ? 'word' : '', text: c }))))),
     ]))),
     callout('key', `<p>Tokens → embeddings → attention → feed-forward → next-word bet, repeated. If you followed the numbers in this book, you understand the machine. The rest is engineering and scale.</p>`),

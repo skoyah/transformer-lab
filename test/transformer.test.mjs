@@ -102,13 +102,15 @@ test('state: edits invalidate derived values through the graph', () => {
   assert.strictEqual(d1.K, kBefore);
   assert.equal(events.at(-1).affected[0], 'Q');
 
+  const vocabBefore = getExperiment().vocab.slice();
   setSentence('the dog sat on the log');
   const s = getExperiment();
-  assert.deepEqual(s.vocab.slice(0, 5), ['the', 'cat', 'sat', 'on', 'mat']);
-  assert.ok(s.vocab.includes('dog') && s.vocab.includes('log'));
+  assert.deepEqual(s.vocab.slice(0, vocabBefore.length), vocabBefore, 'existing pieces keep their ids');
+  assert.ok(s.vocab.length >= vocabBefore.length);
   assert.equal(s.weights.embedding.length, s.vocab.length);
   assert.equal(s.weights.Wout.length, s.vocab.length);
-  assert.equal(getDerived().tokens.length, 6);
+  assert.equal(getDerived().tokens.length, s.tokenIds.length);
+  assert.ok(getDerived().tokens.every((t) => s.vocab.includes(t)));
 
   setCausal(false);
   assert.ok(getDerived().attentionWeights[0][1] > 0);
@@ -143,9 +145,10 @@ test('forwardIds + generate run on arbitrary prompts', async () => {
   const ids = [0, 1];
   const d = forwardIds(s, ids);
   assert.equal(d.probs.length, 2);
-  const longer = forwardIds(s, Array.from({ length: 12 }, () => 0)); // beyond stored positions
-  assert.equal(longer.probs.length, 12);
-  assert.equal(s.weights.positional.length, 8, 'stored positional table untouched');
+  const stored = s.weights.positional.length;
+  const longer = forwardIds(s, Array.from({ length: stored + 4 }, () => 0)); // beyond stored positions
+  assert.equal(longer.probs.length, stored + 4);
+  assert.equal(s.weights.positional.length, stored, 'stored positional table untouched');
   const out = generate(s, ids, { steps: 3, temperature: 0 });
   assert.equal(out.length, 3);
   assert.ok(out.every((g) => typeof g.token === 'string' && g.attention.length === g.context.length));

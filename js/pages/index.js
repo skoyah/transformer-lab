@@ -12,7 +12,7 @@ initPage('index.html');
 const content = document.getElementById('content');
 
 const STAGE_WHAT = {
-  tokens: 'chop the text into words', tokenIds: 'look each word up in the dictionary',
+  tokens: 'cut the text into pieces (BPE)', tokenIds: 'look each piece up in the dictionary',
   embeddings: 'swap each ID for its coordinates', positionalInput: 'stamp on where the word sits',
   Q: 'what each word is asking', K: 'what each word is offering', V: 'what each word would say',
   KT: 'flip K so questions can meet offers', scores: 'how well every question matches every offer',
