@@ -43,7 +43,10 @@ Snapshots store the persistent experiment only; loading one rebuilds the model a
 - Weight tables: click to type, ↑/↓ to nudge (Shift ±1, Alt ±0.01), or drag sideways to scrub. ⌘Z / Ctrl-Z undoes any model change; "Try it" boxes apply experiments with one click.
 - Chapter 3 draws attention as arcs over the sentence; softmax is shown as a bar race; layer norm as a number-line strip; the causal mask as a curtain.
 - Chapter 6 compares a fresh and the trained model in lockstep, with a training timeline scrubber (deterministic replay), ghost training text and a "hesitating between N words" gauge.
-- Start page: a flow diagram generated from the dependency graph; the nav shows a mini-map of played stages.
+- Start page: a flow diagram generated from the dependency graph; the nav shows how many stages you have played. "Copy share link" packs the whole experiment into a URL; "Copy as NumPy" gives the weights and a forward pass as Python.
+- "Compare with the untrained model" toggles on E, the attention heatmap and Wout show which numbers training moved; Chapter 5 has a "nudge one number" widget (the gradient by hand) and the two-"the"s puzzle; Chapter 3 has attention presets; Chapter 4 lists what each hidden unit fires for.
+- Training runs in a Web Worker with an incremental-graph numerical gradient (a Wout nudge recomputes 3 stages, not 21).
+- Text is capped at 40 tokens; tables taller than ~26rem scroll inside their card and follow the row being computed.
 
 ## Playback model
 

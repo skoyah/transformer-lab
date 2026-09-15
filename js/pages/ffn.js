@@ -90,6 +90,17 @@ function render() {
       },
       done: 'Zeros are where ReLU said no.',
     }) }),
+    el('div', { class: 'card flush fires' }, [
+      el('strong', { style: 'font: 600 13px/1.3 var(--sans)', text: 'What each hidden unit responds to' }),
+      el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .5rem', text: 'A hidden unit “fires” for a token when ReLU lets its value through. Untrained, this is noise; after training, units tend to specialise.' }),
+      el('div', { class: 'fires-list' }, hid.map((h, j) => {
+        const firing = d.tokens.map((t, i) => ({ t, v: d.ffnHidden[i][j] })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v);
+        return el('div', { class: 'fire' }, [
+          el('code', { text: h }),
+          el('span', { text: firing.length ? ` fires for ${firing.map((x) => `${x.t} (${fmt(x.v, 1)})`).join(', ')}` : ' never fires for this text' }),
+        ]);
+      })),
+    ]),
     player({ id: 'ffnOutput', scene: matmulScene({
       A: d.ffnHidden, B: s.weights.W2, C: d.ffnOutput, aTitle: 'H', bTitle: 'W₂', cTitle: 'F', aRows: toks, aCols: hid, bCols: dims,
       idle: 'Press play to squeeze each row back to the usual size.',

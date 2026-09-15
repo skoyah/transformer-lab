@@ -89,6 +89,7 @@ function renderInto(root, id) {
   const gen = (p.gen = (p.gen || 0) + 1);
   setTimeout(() => {
     if (p.gen !== gen || !root.isConnected) return;
+    keepCurrentRowInView(root);
     moveHighlights(root, overlay);
     if (animate) {
       animateStep(root, speedMs());
@@ -147,6 +148,22 @@ export function flyGhost(root, from, to, { duration = 450, text = null, onLand =
   // Safety net: a hidden tab pauses animations; never leave the target hidden.
   setTimeout(land, duration + 800);
   return ghost;
+}
+
+// Tall tables scroll inside their container; keep the row being computed visible.
+function keepCurrentRowInView(root) {
+  root.querySelectorAll('.player-stage .scroll').forEach((box) => {
+    const row = box.querySelector('tr.hlrow') || box.querySelector('td.hlcell')?.parentElement;
+    const col = box.querySelector('td.hlcol, td.hlcell');
+    if (row && box.scrollHeight > box.clientHeight) {
+      const y = row.offsetTop;
+      if (y < box.scrollTop + 30 || y + row.offsetHeight > box.scrollTop + box.clientHeight - 10) box.scrollTop = Math.max(0, y - box.clientHeight / 2);
+    }
+    if (col && box.scrollWidth > box.clientWidth) {
+      const x = col.offsetLeft;
+      if (x < box.scrollLeft + 60 || x + col.offsetWidth > box.scrollLeft + box.clientWidth - 10) box.scrollLeft = Math.max(0, x - box.clientWidth / 2);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------

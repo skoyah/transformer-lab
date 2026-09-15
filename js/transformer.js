@@ -410,15 +410,24 @@ export function numericalGradient(state, eps = 1e-4) {
   // skipping the rest keeps gradients exact and the loop short.
   const usedIds = new Set(state.tokenIds);
   const n = state.tokenIds.length;
+  // Each nudge only invalidates the stages downstream of its table, so the
+  // rest of the pipeline is reused from one baseline pass (a Wout nudge
+  // recomputes three stages instead of twenty-one).
+  const base = forward(work);
+  const dirtyFor = Object.fromEntries(TRAINABLE.map((name) => [name, new Set(affectedStages([`weights.${name}`]))]));
+  const lossWith = (name) => {
+    const d = forward(work, base, dirtyFor[name]);
+    return crossEntropy(d.probs, d.tokenIds);
+  };
   forEachParam(work.weights, (row, c, name, r) => {
     const gradRow = r >= 0 ? grads[name][r] : grads[name];
     if (name === 'embedding' && !usedIds.has(r)) { gradRow[c] = 0; return; }
     if (name === 'positional' && r >= n) { gradRow[c] = 0; return; }
     const original = row[c];
     row[c] = original + eps;
-    const plus = lossOf(work);
+    const plus = lossWith(name);
     row[c] = original - eps;
-    const minus = lossOf(work);
+    const minus = lossWith(name);
     row[c] = original;
     gradRow[c] = (plus - minus) / (2 * eps);
   });

@@ -153,3 +153,28 @@ test('forwardIds + generate run on arbitrary prompts', async () => {
   const b = generate(s, ids, { steps: 3, temperature: 1, seed: 7 });
   assert.deepEqual(a.map((g) => g.id), b.map((g) => g.id), 'sampling is seeded');
 });
+
+test('incremental numerical gradient matches a full recompute', async () => {
+  const { numericalGradient, forward, crossEntropy, cloneWeights, TRAINABLE } = await import('../js/transformer.js');
+  const s = createExperiment();
+  const fast = numericalGradient(s);
+  // naive reference: full forward for every nudge
+  const eps = 1e-4;
+  const work = { ...s, weights: cloneWeights(s.weights) };
+  const lossFull = () => { const d = forward(work); return crossEntropy(d.probs, d.tokenIds); };
+  let maxDiff = 0;
+  for (const name of TRAINABLE) {
+    const w = work.weights[name];
+    const rows = Array.isArray(w[0]) ? w : [w];
+    rows.forEach((row, r) => row.forEach((_, c) => {
+      const o = row[c];
+      row[c] = o + eps; const p = lossFull();
+      row[c] = o - eps; const m = lossFull();
+      row[c] = o;
+      const ref = (p - m) / (2 * eps);
+      const got = Array.isArray(w[0]) ? fast[name][r][c] : fast[name][c];
+      if (!(name === 'embedding' && !s.tokenIds.includes(r)) && !(name === 'positional' && r >= s.tokenIds.length)) maxDiff = Math.max(maxDiff, Math.abs(ref - got));
+    }));
+  }
+  assert.ok(maxDiff < 1e-9, `max diff ${maxDiff}`);
+});

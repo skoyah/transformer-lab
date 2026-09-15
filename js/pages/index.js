@@ -1,11 +1,11 @@
 import { STAGES, shapeOf } from '../transformer.js';
 import {
-  getExperiment, getDerived, setSentence, setModelConfig, setCausal, setLearningRate,
+  getExperiment, getDerived, setSentence, sentenceProblem, setModelConfig, setCausal, setLearningRate,
   setAnimation, resetExperiment, saveSnapshot, loadSnapshot, deleteSnapshot, exportSnapshot,
-  importSnapshot, DIM_OPTIONS, HIDDEN_OPTIONS,
+  importSnapshot, DIM_OPTIONS, HIDDEN_OPTIONS, MAX_TOKENS,
 } from '../state.js';
 import { initPage, bindRender, el, fmt, pct, esc, lesson, prose, callout, flowDiagram, CHAPTERS } from '../ui.js';
-import { onChange } from '../state.js';
+import { onChange, shareUrl, decodeShared, loadShared, asNumpy } from '../state.js';
 
 const arrivedFrom = getExperiment().currentStep;
 initPage('index.html');
@@ -29,7 +29,14 @@ function heroPanel() {
   const last = s.tokenIds.length - 1;
   const pred = d.prediction[last];
   const sentence = el('textarea', { text: s.sentence, 'aria-label': 'Training text' });
-  const apply = () => { if (!setSentence(sentence.value)) sentence.value = getExperiment().sentence; };
+  const problem = el('p', { class: 'fig-caption problem', hidden: !s.notice, text: s.notice || '' });
+  const apply = () => {
+    const why = sentenceProblem(sentence.value);
+    problem.textContent = why || '';
+    problem.hidden = !why;
+    if (!why && !setSentence(sentence.value)) sentence.value = getExperiment().sentence;
+  };
+  sentence.addEventListener('input', () => { const why = sentenceProblem(sentence.value); problem.textContent = why || ''; problem.hidden = !why; });
   sentence.addEventListener('change', apply);
   sentence.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); apply(); } });
 
@@ -38,7 +45,8 @@ function heroPanel() {
       el('h3', { style: 'margin-top:0', text: 'Your text' }),
       prose(`<p>Everything in this book is computed from this text. A sentence or two is plenty — the model is small and you'll want to read every number. Press Enter to apply.</p>`),
       sentence,
-      el('p', { class: 'fig-caption', text: `${d.tokens.length} tokens · ${s.vocab.length} words in the dictionary · ${s.config.dim} numbers per word` }),
+      problem,
+      el('p', { class: 'fig-caption', text: `${d.tokens.length} tokens (max ${MAX_TOKENS}) · ${s.vocab.length} words in the dictionary · ${s.config.dim} numbers per word` }),
     ]),
     el('div', { class: 'card' }, [
       el('h3', { style: 'margin-top:0', text: 'Right now the model thinks…' }),
@@ -167,12 +175,21 @@ function snapshotsPanel() {
     document.body.append(a); a.click(); a.remove();
   };
   return lesson('Bookmarks', [
-    prose(`<p>A bookmark saves the model as it is right now — text, dictionary, seed, settings and every weight — so you can experiment freely and come back. It stores only the inputs; all the derived numbers are recomputed when you load it.</p>`),
+    prose(`<p>A bookmark saves the model as it is right now — text, dictionary, seed, settings and every weight — so you can experiment freely and come back. It stores only the inputs; all the derived numbers are recomputed when you load it. A <strong>share link</strong> packs the same thing into a URL you can send to someone; <strong>Copy as NumPy</strong> gives you the weights and a forward pass as Python to check every number by hand.</p>`),
     el('div', { class: 'card' }, [
       el('div', { class: 'controls' }, [
         el('label', {}, ['Name', name]),
         el('button', { class: 'primary', text: 'Bookmark this state', onclick: () => { saveSnapshot(name.value); name.value = ''; } }),
         el('button', { text: 'Export as file', onclick: () => download(null, 'transformer-lab-experiment') }),
+      el('button', { text: 'Copy share link', title: 'A link that carries this exact model (compressed into the URL)', onclick: async (e) => {
+        const url = await shareUrl();
+        try { await navigator.clipboard.writeText(url); e.target.textContent = 'Link copied ✓'; } catch { prompt('Copy this link:', url); }
+        setTimeout(() => { e.target.textContent = 'Copy share link'; }, 1800);
+      } }),
+      el('button', { text: 'Copy as NumPy', title: 'The weights and a forward pass as Python, to check the numbers yourself', onclick: async (e) => {
+        try { await navigator.clipboard.writeText(asNumpy()); e.target.textContent = 'Copied ✓'; } catch { prompt('Copy:', asNumpy()); }
+        setTimeout(() => { e.target.textContent = 'Copy as NumPy'; }, 1800);
+      } }),
         el('button', { text: 'Import file…', onclick: () => file.click() }),
         file,
       ]),
@@ -201,3 +218,11 @@ onChange((event) => {
 });
 
 bindRender(render, { quietKeys: ['snapshots'] });
+
+// Arriving with #s=… : offer to load the shared experiment.
+decodeShared(location.hash).then((parsed) => {
+  if (!parsed) return;
+  const e = parsed.experiment;
+  if (confirm(`Load the shared experiment?\n\n“${e.sentence}” · d=${e.config?.dim} · ${e.trainingHistory?.length || 0} training steps\n\nYour current model is kept in the undo history (⌘Z).`)) loadShared(parsed);
+  history.replaceState(null, '', location.pathname);
+});

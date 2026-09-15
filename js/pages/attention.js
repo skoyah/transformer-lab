@@ -1,5 +1,6 @@
-import { getExperiment, getDerived, setWeightCell, setWeights, setCausal } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { getExperiment, getDerived, setWeightCell, setWeights, setCausal, untrainedExperiment } from '../state.js';
+import { forward } from '../transformer.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabels, dimLabels } from '../ui.js';
 import { SPEEDS } from '../player.js';
 import { player, chapterControls } from '../player.js';
 import { matmulScene, rowScene, transposeScene, vec, cellRef } from '../scenes.js';
@@ -16,6 +17,8 @@ function render() {
   const n = d.tokens.length;
   const sqrtD = Math.sqrt(s.config.dim);
   const X = d.positionalInput;
+  const freshD = compareOn() ? forward(untrainedExperiment()) : null;
+  const identity = (k) => Array.from({ length: s.config.dim }, (_, i) => Array.from({ length: s.config.dim }, (_, j) => (i === j ? k : 0)));
 
   const weightTable = (name, title) => matrixTable({
     title, matrix: s.weights[name], rowLabels: dims, colLabels: dims, editable: true,
@@ -44,6 +47,13 @@ function render() {
     el('div', { class: 'card figure' }, [
       el('div', { class: 'figure-row' }, [weightTable('Wq', 'Wq — makes questions'), weightTable('Wk', 'Wk — makes badges'), weightTable('Wv', 'Wv — makes notes')]),
       el('p', { class: 'fig-caption', text: 'Edit a cell of Wq and only the question side needs replaying: Q, then the scores, then everything after. K and V keep their results.' }),
+      el('div', { class: 'presets' }, [
+        el('span', { class: 'fig-caption', style: 'margin:0', text: 'Presets to get a feel for the heatmap:' }),
+        el('button', { text: 'Attend to yourself', title: 'Wq = Wk = 3·I — every question matches its own badge best', onclick: () => setWeights({ Wq: identity(3), Wk: identity(3) }) }),
+        el('button', { text: 'Attend evenly', title: 'Wq = 0 — every score is 0, so every visible word gets an equal share', onclick: () => setWeights({ Wq: identity(0) }) }),
+        el('button', { text: 'Attend to the previous word', title: 'Wq = 3·I, Wk = −3·I on a wave pattern tends to favour neighbours', onclick: () => setWeights({ Wq: identity(3), Wk: identity(-3) }) }),
+        el('span', { class: 'fig-caption', style: 'margin:0', text: '⌘Z to undo.' }),
+      ]),
     ]),
     prose(`<p>Multiplying X by each table gives three new tables with one row per token. Each cell is a dot product: a row of X against a column of the weight table.</p>`),
     projection('Q', 'Wq', 'Q — questions', 'question per token'),
@@ -85,10 +95,11 @@ function render() {
 
   const softmax = lesson('Turn matches into shares', [
     prose(`<p>Scores can be any size, positive or negative. What we want is, for each asking word, a set of <strong>shares</strong> that add up to 100%: “take 60% of this note, 30% of that one, 10% of the other.” The function that does this is called <strong>softmax</strong>: raise <em>e</em> to each score (so everything is positive and bigger scores pull far ahead), then divide by the total.</p>`),
+    el('div', { style: 'margin-bottom:-.6rem' }, compareToggle(render)),
     player({ id: 'attentionWeights', scene: rowScene({
       inputs: [{ title: 'Scaled scores', matrix: d.scaledScores, rowLabels: toks, colLabels: toks }],
       ops: [],
-      output: { title: 'Attention', matrix: d.attentionWeights, rowLabels: toks, colLabels: toks, heat: 'sequential', cornerLabel: 'asks \\ answers' },
+      output: { title: 'Attention', matrix: d.attentionWeights, rowLabels: toks, colLabels: toks, heat: 'sequential', cornerLabel: 'asks \\ answers', compare: freshD ? freshD.attentionWeights : null },
       idle: 'Press play to turn each row of scores into shares that sum to 100%.',
       explain: (i) => {
         const rowS = d.scaledScores[i];

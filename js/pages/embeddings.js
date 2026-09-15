@@ -1,5 +1,5 @@
-import { getExperiment, getDerived, setWeightCell, setWeights } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { getExperiment, getDerived, setWeightCell, setWeights, untrainedExperiment } from '../state.js';
+import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, compareToggle, compareOn, chapterNav, tokenLabels, dimLabels } from '../ui.js';
 import { player, chapterControls } from '../player.js';
 import { lookupScene, rowScene, vec } from '../scenes.js';
 
@@ -15,15 +15,18 @@ function render() {
   const n = d.tokens.length;
   const used = new Set(s.tokenIds);
   const dimCount = s.config.dim;
+  const fresh = compareOn() ? untrainedExperiment() : null;
 
   const location = lesson('Give every word a location', [
     prose(`<p>A word's ID says <em>which</em> word it is, nothing more. What the model needs is something it can do arithmetic with. So each word gets a row of <strong>${dimCount} numbers</strong> — its <strong>embedding</strong>. You can think of them as coordinates: every word is a point in a ${dimCount}-dimensional space, and words that behave alike end up near each other.</p>
       <p>Nobody types these numbers in. They start random and are <em>learned</em> — in Chapter 5 you'll watch them move. Real models use hundreds or thousands of numbers per word; we use ${dimCount} so you can read them.</p>`),
     callout('idea', `<p>Imagine describing food with ${dimCount} sliders — sweet, salty, spicy, crunchy. Every dish becomes ${dimCount} numbers, and “similar dishes” means “similar slider settings”. An embedding is the same idea for words, except the model decides for itself what the sliders mean.</p>`),
     el('div', { class: 'card figure' }, [
+      compareToggle(render),
       matrixTable({
         title: 'Embedding table E', matrix: s.weights.embedding, rowLabels: s.vocab.map((w, i) => `${i} ${w}`), colLabels: dims,
         editable: true, highlightRows: used, cornerLabel: 'id', onEdit: (r, c, v) => setWeightCell('embedding', r, c, v),
+        compare: fresh ? fresh.weights.embedding : null,
       }),
       el('p', { class: 'fig-caption', text: 'One row per dictionary word. Blue is negative, orange positive; stronger colour, bigger number. Highlighted rows are used by your text. Click any number to change it — it is saved, and the stages after it go back to waiting for play. Keyboard: ↑/↓ nudge by 0.1 (Shift ±1, Alt ±0.01), ←/→ move between cells, Enter saves and moves down, Esc reverts.' }),
     ]),
@@ -50,7 +53,7 @@ function render() {
         title: 'Position table P', matrix: s.weights.positional, rowLabels: s.weights.positional.map((_, i) => `pos ${i}`), colLabels: dims,
         editable: true, highlightRows: new Set(Array.from({ length: n }, (_, i) => i)), onEdit: (r, c, v) => setWeightCell('positional', r, c, v),
       }),
-      el('p', { class: 'fig-caption', text: 'Starts as a wave pattern (sines and cosines of the position), which is what the original transformer used. Only the highlighted rows are needed for your text. Editable and saved like any weight.' }),
+      el('p', { class: 'fig-caption', text: 'Starts as a wave pattern (sines and cosines of the position), which is what the original transformer used. Why waves? Any distinct pattern per position would do, but with sines the pattern for “two seats further along” looks the same wherever you are in the text, so the model can learn relative distances once and reuse them. Only the highlighted rows are needed for your text. Editable and saved like any weight.' }),
     ]),
   ]);
 

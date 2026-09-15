@@ -127,6 +127,17 @@ export function chapterNav(active) {
   ]);
 }
 
+// "Compare with the untrained model" checkbox; state lives in sessionStorage so it follows the reader between chapters.
+export function compareToggle(onchange) {
+  let on = false;
+  try { on = sessionStorage.getItem('tl:compare') === '1'; } catch {}
+  return el('label', { class: 'compare-toggle' }, [
+    el('input', { type: 'checkbox', checked: on, onchange: (e) => { try { sessionStorage.setItem('tl:compare', e.target.checked ? '1' : '0'); } catch {} onchange(e.target.checked); } }),
+    'Compare with the untrained model (▲▼ = moved by training or editing)',
+  ]);
+}
+export function compareOn() { try { return sessionStorage.getItem('tl:compare') === '1'; } catch { return false; } }
+
 export function tag(kind) {
   return el('span', { class: `tag ${kind}`, text: kind === 'stored' ? 'saved input' : 'recomputed' });
 }
@@ -225,6 +236,7 @@ export function matrixTable(opts) {
     title, matrix, rowLabels, colLabels, editable = false, onEdit, heat = 'diverging',
     decimals = 2, highlightRows = null, dimRows = null, cornerLabel = '', note = null, small = false,
     filled = null, hlRow = null, hlCol = null, hlCell = null, pulse = null,
+    compare = null, // same-shaped matrix (e.g. the untrained model's): cells show how they moved
   } = opts;
   const rows = Array.isArray(matrix[0]) ? matrix : [matrix];
   let maxAbs = 0;
@@ -256,6 +268,7 @@ export function matrixTable(opts) {
       } else if (editable) {
         td.append(el('input', {
           type: 'text', inputmode: 'decimal', value: fmt(v, decimals), 'aria-label': `${title || 'cell'} ${r},${c}`,
+          'aria-description': `${title || 'cell'}, row ${rowLabels ? rowLabels[r] : r}, column ${colLabels ? colLabels[c] : c}`,
           onchange: (e) => {
             const parsed = Number(e.target.value.replace(',', '.'));
             if (!Number.isFinite(parsed)) { e.target.value = fmt(v, decimals); return; }
@@ -267,6 +280,17 @@ export function matrixTable(opts) {
         }));
       } else {
         td.textContent = fmt(v, decimals);
+      }
+      if (compare && !isBlank && compare[r] && typeof compare[r][c] === 'number') {
+        const delta = v - compare[r][c];
+        if (Math.abs(delta) >= 0.005) {
+          td.classList.add(delta > 0 ? 'moved-up' : 'moved-down');
+          td.title = `untrained: ${fmt(compare[r][c], decimals)} → now ${fmt(v, decimals)} (${delta > 0 ? '+' : ''}${fmt(delta, decimals)})`;
+          td.append(el('span', { class: 'delta', text: delta > 0 ? '▲' : '▼' }));
+        } else {
+          td.classList.add('unmoved');
+          td.title = `unchanged since untrained (${fmt(compare[r][c], decimals)})`;
+        }
       }
       tr.append(td);
     });
@@ -379,6 +403,14 @@ const KEY_LABELS = {
 let logEl = null;
 let sequence = 0;
 
+// One polite announcement per event for assistive tech (the visual log itself is not live).
+function announce(text) {
+  const node = document.getElementById('announce');
+  if (!node) return;
+  node.textContent = '';
+  setTimeout(() => { node.textContent = text; }, 30);
+}
+
 function mountLog() {
   logEl = document.getElementById('recalc-log');
   if (!logEl) return;
@@ -398,6 +430,7 @@ function mountLog() {
 function list() { return logEl.querySelector('.entries'); }
 
 function describeChange(event) {
+  if (event.shared) return 'Loaded an experiment from a shared link';
   if (event.undo) return 'Undo — the previous version of the model is back';
   if (event.redo) return 'Redo';
   if (event.reset) return 'You reset the experiment';
@@ -433,6 +466,7 @@ export function showRecalculation(event) {
     el('div', { class: 'steps' }, chips),
   ]);
   list().prepend(entry);
+  announce(`${describeChange(event)}. ${event.affected.length} stage${event.affected.length === 1 ? '' : 's'} waiting to be played.`);
   trainingRun = event.training ? { entry, steps: event.steps, lossStart: event.training.lossBefore } : null;
   while (list().children.length > 5) list().lastChild.remove();
 }

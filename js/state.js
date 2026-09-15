@@ -22,6 +22,16 @@ export const DEFAULTS = {
 };
 
 export const DIM_OPTIONS = [2, 3, 4, 6, 8];
+export const MAX_TOKENS = 40;      // keeps every table readable and every player finishable
+export const MAX_PROMPT_TOKENS = 24;
+
+// Why a text cannot be used, or null if it is fine.
+export function sentenceProblem(text) {
+  const n = tokenize(text || '').length;
+  if (n === 0) return 'Type at least one word.';
+  if (n > MAX_TOKENS) return `That is ${n} tokens — please keep it to ${MAX_TOKENS} or fewer. This is a book, not a data centre: every table has one row per token.`;
+  return null;
+}
 export const HIDDEN_OPTIONS = [4, 8, 16];
 const MIN_POSITIONS = 8;
 
@@ -123,6 +133,17 @@ let state = readStorage() || createExperiment();
 setTimeout(() => { lastCommitted = experimentOnly(); }, 0);
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
 if (!state.progress) state.progress = {};
+// Texts saved before the token cap existed: shorten them once, and say so.
+if (state.tokenIds.length > MAX_TOKENS) {
+  const kept = tokenize(state.sentence).slice(0, MAX_TOKENS);
+  state.sentence = kept.join(' ');
+  state.tokenIds = tokensToIds(kept, state.vocab);
+  state.progress = {};
+  state.notice = `Your text had more than ${MAX_TOKENS} tokens, so it was shortened to the first ${MAX_TOKENS}. Every table has one row per token; keeping it short keeps the book readable.`;
+  writeStorage(state);
+}
+// Whatever was stored, every vocab entry and position must have its rows.
+if (ensureCapacity(state).length) writeStorage(state);
 if (!state.animation || !state.animation.speed) state.animation = { speed: 'normal' };
 
 // ---------------------------------------------------------------------------
@@ -245,8 +266,9 @@ export function setSentence(text) {
   const sentence = String(text ?? '').trim();
   if (sentence === state.sentence) return null;
   const tokens = tokenize(sentence);
-  if (tokens.length === 0) return null;
+  if (tokens.length === 0 || tokens.length > MAX_TOKENS) return null;
   state.sentence = sentence;
+  delete state.notice;
   state.vocab = extendVocab(state.vocab, tokens);
   state.tokenIds = tokensToIds(tokens, state.vocab);
   const grown = ensureCapacity(state);
@@ -355,6 +377,65 @@ export function setCurrentStep(page) {
   commitQuiet(['currentStep']);
 }
 
+// Asynchronous training in a Web Worker (falls back to the main thread).
+// trainStepAsync() resolves with the commit event of one step; trainMany()
+// sends the whole batch at once and applies each step as it lands.
+let worker = null;
+let workerBroken = false;
+let nextJob = 0;
+const jobs = new Map(); // id -> { onStep, resolve }
+function getWorker() {
+  if (worker || workerBroken) return worker;
+  try {
+    worker = new Worker(new URL('./train.worker.js', import.meta.url), { type: 'module' });
+    worker.onmessage = (e) => {
+      const job = jobs.get(e.data.id);
+      if (!job) return;
+      const event = applyTrained(e.data);
+      job.onStep && job.onStep(e.data.i, event);
+      if (e.data.done) { jobs.delete(e.data.id); job.resolve(event); }
+    };
+    worker.onerror = () => {
+      workerBroken = true; worker = null;
+      for (const [, job] of jobs) job.resolve(null);
+      jobs.clear();
+    };
+  } catch { workerBroken = true; worker = null; }
+  return worker;
+}
+
+function applyTrained(result) {
+  state.weights = result.weights;
+  state.trainingHistory.push({ step: state.trainingHistory.length + 1, loss: result.lossBefore, learningRate: state.learningRate });
+  return commit(TRAINABLE.map((n) => `weights.${n}`), { training: result, steps: 1 });
+}
+
+function trainInWorker(steps, onStep) {
+  const w = typeof Worker !== 'undefined' ? getWorker() : null;
+  if (!w) return null;
+  return new Promise((resolve) => {
+    const id = ++nextJob;
+    jobs.set(id, { onStep, resolve });
+    w.postMessage({ id, state: experimentOnly(), learningRate: state.learningRate, steps });
+  });
+}
+
+export async function trainStepAsync() {
+  const viaWorker = trainInWorker(1);
+  const event = viaWorker ? await viaWorker : null;
+  return event || train(1);
+}
+
+// Several steps; onStep(i, event) fires after each is applied.
+export async function trainMany(steps, onStep) {
+  const viaWorker = trainInWorker(steps, onStep);
+  const event = viaWorker ? await viaWorker : null;
+  if (event) return event;
+  let last = null;
+  for (let i = 0; i < steps; i++) { last = train(1); onStep && onStep(i + 1, last); }
+  return last;
+}
+
 export function train(steps = 1) {
   let last = null;
   let first = null;
@@ -448,4 +529,82 @@ export function importSnapshot(json) {
   state.snapshots.push(snapshot);
   commitQuiet(['snapshots']);
   return snapshot;
+}
+
+// ---------------------------------------------------------------------------
+// Sharing: the experiment compressed into a URL fragment, and a NumPy dump.
+// ---------------------------------------------------------------------------
+
+function b64url(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function unb64url(str) {
+  const bin = atob(str.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (str.length % 4)) % 4));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+async function pipe(bytes, Stream, kind) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new Stream(kind));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+export async function shareUrl() {
+  const json = new TextEncoder().encode(JSON.stringify({ version: VERSION, experiment: experimentOnly() }));
+  let payload;
+  if (typeof CompressionStream !== 'undefined') payload = 'z' + b64url(await pipe(json, CompressionStream, 'deflate-raw'));
+  else payload = 'j' + b64url(json);
+  return `${location.origin}${location.pathname.replace(/[^/]*$/, '')}index.html#s=${payload}`;
+}
+
+// Decode a "#s=" fragment; returns { experiment } or null.
+export async function decodeShared(hash) {
+  const m = /[#&]s=([^&]+)/.exec(hash || '');
+  if (!m) return null;
+  try {
+    const kind = m[1][0];
+    const bytes = unb64url(m[1].slice(1));
+    const json = kind === 'z' ? await pipe(bytes, DecompressionStream, 'deflate-raw') : bytes;
+    const parsed = JSON.parse(new TextDecoder().decode(json));
+    if (!parsed.experiment || !parsed.experiment.weights) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+export function loadShared(parsed) {
+  const exp = parsed.experiment;
+  Object.assign(state, JSON.parse(JSON.stringify({ trainingHistory: [], ...exp })));
+  ensureCapacity(state);
+  return commit(['*'], { shared: true });
+}
+
+export function asNumpy() {
+  const np = (name, m) => `${name} = np.array(${JSON.stringify(m)})`;
+  const w = state.weights;
+  return [
+    '# Transformer Lab — current experiment as NumPy',
+    'import numpy as np',
+    `sentence = ${JSON.stringify(state.sentence)}`,
+    `vocab = ${JSON.stringify(state.vocab)}`,
+    `token_ids = np.array(${JSON.stringify(state.tokenIds)})`,
+    `dim, hidden, causal = ${state.config.dim}, ${state.config.hidden}, ${state.config.causal ? 'True' : 'False'}`,
+    np('E', w.embedding), np('P', w.positional), np('Wq', w.Wq), np('Wk', w.Wk), np('Wv', w.Wv),
+    np('W1', w.W1), np('b1', w.b1), np('W2', w.W2), np('b2', w.b2), np('Wout', w.Wout),
+    '',
+    'def layer_norm(x, eps=1e-5):',
+    '    return (x - x.mean(-1, keepdims=True)) / np.sqrt(x.var(-1, keepdims=True) + eps)',
+    'def softmax(x):',
+    '    e = np.exp(x - x.max(-1, keepdims=True)); return e / e.sum(-1, keepdims=True)',
+    '',
+    'X = E[token_ids] + P[:len(token_ids)]',
+    'Q, K, V = X @ Wq, X @ Wk, X @ Wv',
+    'S = Q @ K.T / np.sqrt(dim)',
+    'if causal: S = S + np.triu(np.full_like(S, -np.inf), 1)',
+    'A = softmax(S)',
+    'N1 = layer_norm(X + A @ V)',
+    'H = np.maximum(N1 @ W1 + b1, 0)',
+    'N2 = layer_norm(N1 + H @ W2 + b2)',
+    'probs = softmax(N2 @ Wout.T)',
+    'print([vocab[i] for i in probs.argmax(-1)])',
+  ].join('\n');
 }

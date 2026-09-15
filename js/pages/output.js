@@ -1,21 +1,27 @@
-import { crossEntropy } from '../transformer.js';
-import { getExperiment, getDerived, setWeightCell, setLearningRate, train } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, chapterNav, tokenLabels, dimLabels } from '../ui.js';
+import { crossEntropy, lossOf, cloneWeights } from '../transformer.js';
+import { getExperiment, getDerived, setWeightCell, setWeights, setLearningRate, setCausal, train, trainStepAsync, trainMany, untrainedExperiment } from '../state.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabels, dimLabels } from '../ui.js';
 import { player, chapterControls, pauseAll, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, predictionScene, vec } from '../scenes.js';
 
 initPage('output.html');
 const content = document.getElementById('content');
 const STAGES_HERE = ['logits', 'probs', 'prediction'];
+const nudge = { name: 'Wout', r: 0, c: 0 }; // which weight the "nudge one number" widget looks at
 
-// Training runs one step per tick while "playing"; each step is persisted.
-const training = { running: false, timer: null, runSteps: 0 };
-function trainTick() {
+// Training runs one step per tick while "playing"; each step is computed in a
+// Web Worker (the page stays responsive) and persisted as it lands.
+const training = { running: false, timer: null, runSteps: 0, busy: false };
+async function trainTick() {
   if (!training.running) return;
-  train(1);
+  const started = performance.now();
+  training.busy = true;
+  await trainStepAsync();
+  training.busy = false;
+  if (!training.running) return;
   training.runSteps++;
   const ms = SPEEDS[getExperiment().animation.speed] || SPEEDS.normal;
-  training.timer = setTimeout(trainTick, ms);
+  training.timer = setTimeout(trainTick, Math.max(0, ms - (performance.now() - started)));
 }
 function startTraining() { if (training.running) return; pauseAll(); training.running = true; training.runSteps = 0; trainTick(); }
 function stopTraining() { training.running = false; clearTimeout(training.timer); render(); }
@@ -47,12 +53,63 @@ function render() {
   const n = d.tokens.length;
   const hits = d.prediction.slice(0, n - 1).filter((p, i) => p.token === d.tokens[i + 1]).length;
   const vocabLabels = s.vocab;
+  const fresh = compareOn() ? untrainedExperiment() : null;
+
+  // ---- The two-"the"s puzzle: a word that appears twice with different successors ----
+  let puzzle = null;
+  for (let i = 0; i < n - 1 && !puzzle; i++) {
+    for (let j = i + 1; j < n - 1; j++) {
+      if (d.tokens[i] === d.tokens[j] && d.tokens[i + 1] !== d.tokens[j + 1]) { puzzle = { w: d.tokens[i], i, j, a: d.tokens[i + 1], b: d.tokens[j + 1] }; break; }
+    }
+  }
+  const puzzleBox = puzzle
+    ? callout('key', `<p><strong>Same word, two different answers — how?</strong> “${esc(puzzle.w)}” appears at position ${puzzle.i} and again at position ${puzzle.j}, followed once by “${esc(puzzle.a)}” and once by “${esc(puzzle.b)}”. Both copies start from the <em>same</em> embedding row. The only things that can tell them apart are the position pattern (Chapter 2) and what they gathered from the words before them (Chapter 3). Take those away and the model can be right at most once.</p>`, 'A puzzle', [
+      { label: 'Zero the position table and allow peeking', run: () => { setWeights({ positional: getExperiment().weights.positional.map((r) => r.map(() => 0)) }); setCausal(false); }, then: 'prediction' },
+      { label: 'Zero the position table only', run: () => setWeights({ positional: getExperiment().weights.positional.map((r) => r.map(() => 0)) }), then: 'prediction' },
+    ])
+    : callout('key', `<p><strong>A puzzle for your text:</strong> put the same word in twice with different words after it (the default “the cat sat on the mat” has “the”→cat and “the”→mat). Both copies start from the same embedding row — only the position pattern and attention can tell them apart. Change the text on the Start page and come back.</p>`, 'A puzzle');
+
+  // ---- Nudge one number: the gradient, done by hand ----
+  if (nudge.name === 'Wout' && nudge.r === 0 && nudge.c === 0 && !nudge.touched) { nudge.r = d.prediction[n - 1].id; nudge.touched = true; }
+  const nudgeName = nudge.name, nr = Math.min(nudge.r, s.weights[nudgeName].length - 1), nc = Math.min(nudge.c, (Array.isArray(s.weights[nudgeName][0]) ? s.weights[nudgeName][0].length : s.weights[nudgeName].length) - 1);
+  const eps = 0.01;
+  const nudged = (delta) => {
+    const w = cloneWeights(s.weights);
+    if (Array.isArray(w[nudgeName][0])) w[nudgeName][nr][nc] += delta; else w[nudgeName][nc] += delta;
+    return lossOf({ ...s, weights: w });
+  };
+  const w0 = Array.isArray(s.weights[nudgeName][0]) ? s.weights[nudgeName][nr][nc] : s.weights[nudgeName][nc];
+  const lPlus = nudged(eps), lMinus = nudged(-eps);
+  const slope = (lPlus - lMinus) / (2 * eps);
+  const step = -s.learningRate * slope;
+  const names = ['Wout', 'Wq', 'Wk', 'Wv', 'W1', 'W2', 'embedding', 'positional', 'b1', 'b2'];
+  const is1d = !Array.isArray(s.weights[nudgeName][0]);
+  const nudgeBox = el('div', { class: 'card nudge' }, [
+    el('strong', { style: 'font: 600 14px/1.3 var(--sans)', text: 'Nudge one number yourself' }),
+    el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .7rem', text: 'This is exactly what one training step does, for every number at once. Pick a weight; the model is re-run with it a hair higher and a hair lower.' }),
+    el('div', { class: 'controls' }, [
+      el('label', {}, ['Table', el('select', { onchange: (e) => { nudge.name = e.target.value; nudge.r = 0; nudge.c = 0; render(); } }, names.map((k) => el('option', { value: k, text: k, selected: k === nudgeName })))]),
+      is1d ? null : el('label', {}, ['Row', el('input', { type: 'number', min: 0, max: s.weights[nudgeName].length - 1, value: nr, onchange: (e) => { nudge.r = Math.max(0, Number(e.target.value) || 0); render(); } })]),
+      el('label', {}, [is1d ? 'Index' : 'Column', el('input', { type: 'number', min: 0, value: nc, onchange: (e) => { nudge.c = Math.max(0, Number(e.target.value) || 0); render(); } })]),
+    ]),
+    el('div', { class: 'worked', style: 'margin-top:.8rem', html:
+      `<span class="lhs">${nudgeName}${is1d ? `[${nc}]` : `[${nr}][${nc}]`}</span> <span class="eq">=</span> <b>${fmt(w0, 3)}</b> &nbsp; <span class="eq">surprise now</span> <b>${fmt(loss, 4)}</b><br>` +
+      `<span class="eq">a hair higher (+${eps}):</span> <b>${fmt(lPlus, 4)}</b> &nbsp; <span class="eq">a hair lower (−${eps}):</span> <b>${fmt(lMinus, 4)}</b><br>` +
+      `<span class="eq">slope =</span> (${fmt(lPlus, 4)} − ${fmt(lMinus, 4)}) ÷ ${2 * eps} <span class="eq">=</span> <b>${fmt(slope, 3)}</b> &nbsp; ` +
+      `<span class="eq">so move it</span> <span class="result">${step >= 0 ? '+' : ''}${fmt(step, 4)}</span> <span class="eq">(−learning rate × slope) → </span> <b>${fmt(w0 + step, 3)}</b>` }),
+    el('p', { class: 'fig-caption', style: 'margin:.5rem 0 0', text: slope > 0 ? 'Surprise rises when this number goes up, so training pushes it down.' : slope < 0 ? 'Surprise falls when this number goes up, so training pushes it up.' : 'This number has no effect on surprise right now (probably a row the text never uses).' }),
+    el('div', { class: 'controls', style: 'margin-top:.6rem' }, [
+      el('button', { class: 'primary', text: 'Apply this one nudge', onclick: () => setWeightCell(nudgeName, is1d ? 0 : nr, nc, Math.round((w0 + step) * 1e6) / 1e6) }),
+      el('span', { class: 'fig-caption', style: 'margin:0', text: 'A full training step applies the nudge to every number at once.' }),
+    ]),
+  ]);
 
   const scoring = lesson('Score every word in the dictionary', [
     prose(`<p>Each token now has a final vector (N₂ from Chapter 4). To turn that into a guess about the next word, we need one more table: <strong>Wout</strong>, with one row per dictionary word. The score for a candidate word is the dot product of the token's vector with that word's row — the same “how well do these two match” operation attention used.</p>`),
     el('div', { class: 'card figure' }, [
+      compareToggle(render),
       matrixTable({ title: 'Wout — one scoring row per word', matrix: s.weights.Wout, rowLabels: s.vocab.map((w, i) => `${i} ${w}`), colLabels: dims, editable: true,
-        highlightRows: new Set(s.tokenIds), onEdit: (r, c, v) => setWeightCell('Wout', r, c, v) }),
+        highlightRows: new Set(s.tokenIds), onEdit: (r, c, v) => setWeightCell('Wout', r, c, v), compare: fresh ? fresh.weights.Wout : null }),
       el('p', { class: 'fig-caption', text: 'Sometimes called the “unembedding”: it maps from coordinates back to words.' }),
     ]),
     player({ id: 'logits', scene: matmulScene({
@@ -82,6 +139,7 @@ function render() {
     player({ id: 'prediction', scene: predictionScene({ probs: d.probs, vocab: vocabLabels, tokens: d.tokens, prediction: d.prediction,
       idle: 'Press play to pick the favourite at each position and check it against the text.' }) }),
     el('p', { class: 'fig-caption', text: `${hits} of ${n - 1} next words guessed right.${s.config.causal ? '' : ' Careful: “no peeking” is off, so the model can see the answer — turn it on in Chapter 3 for an honest test.'}` }),
+    puzzleBox,
   ]);
 
   const lr = el('input', { type: 'number', value: s.learningRate, step: 0.01, min: 0.001, onchange: (e) => setLearningRate(e.target.value) });
@@ -95,6 +153,7 @@ function render() {
     el('div', { class: 'worked', html: `<span class="lhs">surprise at position ${t}</span><span class="eq">=</span> −log P(“${esc(d.tokens[t + 1])}” after “${esc(d.tokens[t])}”) <span class="eq">=</span> −log <b>${fmt(pActual, 3)}</b> <span class="eq">=</span> <span class="result">${fmt(-Math.log(Math.max(pActual, 1e-12)))}</span> &nbsp; <span class="eq">— guessing evenly among ${s.vocab.length} words would be −log(1/${s.vocab.length}) = ${fmt(baseline)}</span>` }),
     prose(`<p>Training is remarkably unglamorous. For every one of the ${paramCount} numbers in the weight tables, ask “if I nudged this up a hair, would surprise go up or down?” — then move it a small step the helpful way. The size of that step is the <strong>learning rate</strong>. Repeat.</p>`),
     callout('idea', `<p>It's tuning an instrument with ${paramCount} pegs at once, by ear: turn each peg a fraction, keep it if the chord sounds better. Real models compute all the nudges in one clever pass (backpropagation); here we honestly try each one, which is fine when the model is tiny.</p>`),
+    nudgeBox,
     el('div', { class: `card player ${training.running ? 'playing' : ''}`, dataset: { stage: 'training' } }, [
       el('div', { class: 'kpis' }, [
         el('div', {}, [el('b', { text: fmt(loss, 3) }), el('span', { text: 'surprise right now (lower is better)' })]),
@@ -103,7 +162,7 @@ function render() {
       ]),
       sparkline(s.trainingHistory),
       el('div', { class: 'player-bar' }, [
-        el('button', { class: 'pbtn', title: 'One training step', 'aria-label': 'One training step', html: '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M5 3l7 5-7 5z"/></svg>', onclick: () => { pauseAll(); train(1); } }),
+        el('button', { class: 'pbtn', title: 'One training step', 'aria-label': 'One training step', html: '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M5 3l7 5-7 5z"/></svg>', onclick: () => { pauseAll(); trainStepAsync(); } }),
         training.running
           ? el('button', { class: 'pbtn', style: 'width:auto; padding:0 .8rem; background:var(--warm); border-color:var(--warm); color:#fff', text: 'Pause training', onclick: stopTraining })
           : el('button', { class: 'pbtn', style: 'width:auto; padding:0 .8rem; background:var(--accent); border-color:var(--accent); color:#fff', text: 'Train continuously', onclick: startTraining }),
@@ -117,7 +176,7 @@ function render() {
       <li>Set the learning rate to 1 and train. Too big a step overshoots: surprise may jump <em>up</em>. Bring it back to 0.1.</li>
       <li>Bookmark the model on the Start page before training, so you can compare before and after in Chapter 6.</li>
     </ul>`, null, [
-      { label: 'Train 10 steps now', run: () => { pauseAll(); train(10); }, then: 'prediction' },
+      { label: 'Train 10 steps now', run: () => { pauseAll(); trainMany(10); }, then: 'prediction' },
       { label: 'Learning rate → 1', run: () => setLearningRate(1) },
       { label: 'Learning rate → 0.1', run: () => setLearningRate(0.1) },
     ]),

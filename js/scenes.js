@@ -25,6 +25,8 @@ export function matmulScene({
   const n = C.length;
   const m = C[0].length;
   const colOf = (j) => (bByRow ? B[j] : B.map((r) => r[j]));
+  // Big tables step one row at a time so a player always finishes in a sitting.
+  if (n * m > 240) return matmulRowScene({ A, B, C, aTitle, bTitle, cTitle, aRows, aCols, bCols, bByRow, idle, tail, cHeat, cDecimals, done, colOf });
   return {
     total: n * m,
     hover: (i, j) => ({
@@ -49,6 +51,33 @@ export function matmulScene({
         + (k === n * m ? ` ${doneCaption(done || `All ${n}×${m} cells of ${cTitle} are computed.`)}` : '');
       const extra = tail ? tail(i, j) : '';
       return { body, caption, worked: dotExample(`${cTitle}[${i}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${i}]`, bName: `${bTitle}[${bByRow ? j : ':,' + j}]`, tail: extra }) };
+    },
+  };
+}
+
+function matmulRowScene({ A, B, C, aTitle, bTitle, cTitle, aRows, aCols, bCols, bByRow, idle, tail, cHeat, cDecimals, done, colOf }) {
+  const n = C.length;
+  const m = C[0].length;
+  return {
+    total: n,
+    hover: (i, j) => ({
+      sources: [{ table: 0, row: i }, bByRow ? { table: 1, row: j } : { table: 1, col: j }],
+      worked: dotExample(`${cTitle}[${i}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${i}]`, bName: `${bTitle}[${bByRow ? j : ':,' + j}]`, tail: tail ? tail(i, j) : '' }),
+    }),
+    frame(k) {
+      const i = k ? Math.min(k, n) - 1 : null;
+      const body = row([
+        matrixTable({ title: aTitle, matrix: A, rowLabels: aRows, colLabels: aCols, hlRow: i, small: true }),
+        op('·'),
+        bByRow
+          ? matrixTable({ title: bTitle, matrix: B, rowLabels: bCols, colLabels: aCols, small: true })
+          : matrixTable({ title: bTitle, matrix: B, rowLabels: aCols, colLabels: bCols, small: true }),
+        result(matrixTable({ title: cTitle, matrix: C, rowLabels: aRows, colLabels: bCols, heat: cHeat, decimals: cDecimals, filled: (r) => r < k, hlRow: i })),
+      ]);
+      if (!k) return { body, caption: `${idle} (${n}×${m} cells — this table is big, so each step fills a whole row; hover any cell for its arithmetic.)` };
+      const caption = `Row <b>${i}</b> — “${esc(aRows[i])}” of ${aTitle} dotted with every ${bByRow ? 'row' : 'column'} of ${bTitle}: ${m} dot products.`
+        + (k === n ? ` ${doneCaption(done || `All ${n}×${m} cells of ${cTitle} are computed.`)}` : '');
+      return { body, caption, worked: dotExample(`${cTitle}[${i}][0]`, A[i], colOf(0), { aName: `${aTitle}[${i}]`, bName: `${bTitle}[${bByRow ? 0 : ':,0'}]`, tail: tail ? tail(i, 0) : ' <span class="eq">… and likewise for the other cells of the row</span>' }) };
     },
   };
 }

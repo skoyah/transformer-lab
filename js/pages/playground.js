@@ -1,5 +1,5 @@
 import { tokenize, forwardIds, generate, topK, lossOf, trainStep } from '../transformer.js';
-import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, train } from '../state.js';
+import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, trainMany, MAX_PROMPT_TOKENS } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs } from '../ui.js';
 import { player, groupControls } from '../player.js';
 import { worked } from '../scenes.js';
@@ -8,6 +8,7 @@ initPage('playground.html');
 const content = document.getElementById('content');
 
 let rerolls = 0;          // session-only: which random draw to use when sampling
+let trainingLabel = null; // while a batch of training runs, the button shows progress
 
 // Training timeline: deterministic replay of the recorded steps from the
 // fresh model, cached per step. checkpoint === null means "now".
@@ -150,7 +151,8 @@ function render() {
   const d = getDerived();
   const pg = s.playground;
   const fresh = untrainedExperiment();
-  const words = tokenize(pg.prompt);
+  const words = tokenize(pg.prompt).slice(0, MAX_PROMPT_TOKENS);
+  const promptTooLong = tokenize(pg.prompt).length > MAX_PROMPT_TOKENS;
   const unknown = [...new Set(words.filter((w) => !s.vocab.includes(w)))];
   const ids = promptIds(s, words);
   const steps = s.trainingHistory.length;
@@ -169,6 +171,7 @@ function render() {
   const rerollBtn = el('button', { text: 'Different draw', onclick: () => { rerolls++; render(); }, disabled: pg.temperature <= 0 });
   const controls = el('div', { class: 'card' }, [
     el('label', {}, ['Your prompt (saved)', prompt]),
+    promptTooLong ? el('p', { class: 'fig-caption problem', style: 'margin-top:.6rem', text: `Only the first ${MAX_PROMPT_TOKENS} words of the prompt are used.` }) : null,
     unknown.length ? el('p', { class: 'fig-caption', style: 'margin-top:.6rem' }, [
       `The model has never seen ${unknown.map((w) => `“${w}”`).join(', ')} — those words are skipped. `,
       el('button', { class: 'ghost', style: 'color: var(--accent)', text: `Teach it ${unknown.length > 1 ? 'these words' : 'this word'} (random meaning)`, onclick: () => addWords(unknown) }),
@@ -177,7 +180,11 @@ function render() {
       el('label', {}, ['Words to write', stepsInput]),
       el('label', {}, [`Creativity (temperature) — ${pg.temperature <= 0 ? 'always the favourite' : pg.temperature < 0.8 ? 'mostly the favourite' : pg.temperature <= 1.2 ? 'roll the dice as the model bets' : 'wild'}`, tempInput]),
       rerollBtn,
-      el('button', { class: 'primary', text: 'Train 25 steps', onclick: (e) => { e.target.disabled = true; e.target.textContent = 'Training…'; setTimeout(() => train(25), 20); } }),
+      el('button', { class: 'primary', text: trainingLabel || 'Train 25 steps', disabled: !!trainingLabel, onclick: async () => {
+        trainingLabel = 'Training… 0/25'; render();
+        await trainMany(25, (i) => { trainingLabel = `Training… ${i}/25`; });
+        trainingLabel = null; render();
+      } }),
     ]),
   ]);
 

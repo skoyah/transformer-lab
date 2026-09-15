@@ -1,4 +1,4 @@
-import { getExperiment, getDerived, setSentence } from '../state.js';
+import { getExperiment, getDerived, setSentence, sentenceProblem } from '../state.js';
 import { initPage, bindRender, el, esc, lesson, prose, callout, underHood, matrixTable, chapterNav, caption } from '../ui.js';
 import { player, chapterControls } from '../player.js';
 import { tokenizeScene, idScene } from '../scenes.js';
@@ -12,13 +12,20 @@ function render() {
   const d = getDerived();
 
   const textarea = el('textarea', { text: s.sentence, 'aria-label': 'Training text' });
-  const apply = () => { if (!setSentence(textarea.value)) textarea.value = getExperiment().sentence; };
+  const problem = el('p', { class: 'fig-caption problem', hidden: !s.notice, text: s.notice || '' });
+  const apply = () => {
+    const why = sentenceProblem(textarea.value);
+    problem.textContent = why || '';
+    problem.hidden = !why;
+    if (!why && !setSentence(textarea.value)) textarea.value = getExperiment().sentence;
+  };
+  textarea.addEventListener('input', () => { const why = sentenceProblem(textarea.value); problem.textContent = why || ''; problem.hidden = !why; });
   textarea.addEventListener('change', apply);
   textarea.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); apply(); } });
 
   const intro = lesson('Start with a sentence', [
     prose(`<p>This is the text the whole book follows. It is one of the very few things that is actually <span class="tag stored">saved</span>; every other number you will meet is computed from it. Change it whenever you like — press Enter to apply. Nothing is worked out until you press play on a stage.</p>`),
-    el('div', { class: 'card' }, [textarea]),
+    el('div', { class: 'card' }, [textarea, problem]),
   ]);
 
   const chopping = lesson('Step one: chop it up', [
