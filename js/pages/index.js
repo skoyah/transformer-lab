@@ -169,7 +169,7 @@ function settingsPanel() {
         el('label', { class: 'inline' }, [causal, 'No peeking at later words']),
       ]),
       el('div', { class: 'controls', style: 'margin-top: 1rem' }, [
-        el('label', {}, ['Playback speed', speed]),
+        el('label', {}, ['Default speed for new players', speed]),
         el('button', { class: 'danger', text: 'Reset everything', onclick: () => confirm('Reset the text, settings and all weights to defaults? Bookmarks are kept.') && resetExperiment() }),
       ]),
     ]),

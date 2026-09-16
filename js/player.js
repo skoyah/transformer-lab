@@ -65,8 +65,11 @@ onChange((event) => {
   }
 });
 
-function speedMs() {
-  return SPEEDS[getExperiment().animation.speed] || SPEEDS.normal;
+// Each player has its own speed (kept for the session); the saved animation.speed is only the default for new players.
+function speedMs(id = null) {
+  const p = id ? players.get(id) : null;
+  const key = (p && p.speed) || getExperiment().animation.speed || 'normal';
+  return SPEEDS[key] || SPEEDS.normal;
 }
 
 // key: optional string; when it changes the player goes back to idle (for
@@ -75,7 +78,7 @@ export function player({ id, scene, label, key = null, track = true }) {
   const done = track && getExperiment().progress[id] === 'done';
   let p = players.get(id);
   if (!p) {
-    p = { step: done ? scene.total : 0, playing: false, timer: null, key, track };
+    p = { step: done ? scene.total : 0, playing: false, timer: null, key, track, speed: getExperiment().animation.speed || 'normal' };
     players.set(id, p);
   } else if (key !== p.key) {
     clearTimeout(p.timer);
@@ -132,10 +135,10 @@ function renderInto(root, id) {
     keepCurrentRowInView(root);
     moveHighlights(root, overlay);
     if (animate) {
-      animateStep(root, speedMs());
-      if (frame.animate) frame.animate(root, speedMs());
+      animateStep(root, speedMs(id));
+      if (frame.animate) frame.animate(root, speedMs(id));
     }
-    if (justFinished && p.track) setTimeout(() => { if (root.isConnected && p.step === p.total) showMoved(root, id, p); }, animate ? speedMs() * 0.6 : 0);
+    if (justFinished && p.track) setTimeout(() => { if (root.isConnected && p.step === p.total) showMoved(root, id, p); }, animate ? speedMs(id) * 0.6 : 0);
   }, 0);
   bindHover(root, p);
   bindCellRefs(root);
@@ -428,7 +431,7 @@ function toolbar(id) {
   const p = players.get(id);
   const atStart = p.step === 0;
   const atEnd = p.step === p.total;
-  const speed = getExperiment().animation.speed || 'normal';
+  const speed = p.speed || 'normal';
   const btn = (name, title, onclick, disabled = false) => el('button', { class: 'pbtn', title, 'aria-label': title, html: icon(name), onclick, disabled });
   const scrub = el('input', { type: 'range', min: 0, max: p.total, value: p.step, class: 'scrub', 'aria-label': 'step',
     oninput: (e) => { pause(id); setStep(id, Number(e.target.value)); } });
@@ -444,8 +447,8 @@ function toolbar(id) {
     lab ? btn('end', 'Skip to the end', () => { pause(id); setStep(id, p.total); }, atEnd) : null,
     el('span', { class: 'counter', text: `${p.step} / ${p.total}` }),
     scrub,
-    lab ? el('select', { class: 'speed', 'aria-label': 'Speed', onchange: (e) => { setAnimation({ speed: e.target.value }); for (const other of players.keys()) refresh(other); } },
-      Object.keys(SPEEDS).map((k) => el('option', { value: k, text: k, selected: k === speed }))) : null,
+    el('select', { class: 'speed', 'aria-label': 'Speed of this player', title: 'Speed of this player', onchange: (e) => { p.speed = e.target.value; refresh(id); } },
+      Object.keys(SPEEDS).map((k) => el('option', { value: k, text: k, selected: k === speed }))),
   ]);
 }
 
@@ -490,9 +493,9 @@ export function play(id) {
       if (p.onFinish) { const f = p.onFinish; p.onFinish = null; f(); }
       return;
     }
-    p.timer = setTimeout(tick, speedMs());
+    p.timer = setTimeout(tick, speedMs(id));
   };
-  p.timer = setTimeout(tick, speedMs() * 0.6);
+  p.timer = setTimeout(tick, speedMs(id) * 0.6);
 }
 
 export function pause(id) {
@@ -548,13 +551,10 @@ export function chapterControls(ids) {
   pointerShown = false;
   const s = getExperiment();
   const done = ids.filter((id) => s.progress[id] === 'done').length;
-  const speed = s.animation.speed || 'normal';
   return el('div', { class: 'chapter-controls' }, [
     el('button', { class: 'primary', html: `${icon('play')} Play the whole chapter`, title: 'Plays every stage on this page in order', onclick: () => playSequence(ids) }),
     el('button', { html: `${icon('end')} Skip the animations`, title: 'Show every stage finished', onclick: () => finishSequence(ids) }),
     el('button', { class: 'ghost', html: `${icon('start')} Replay from scratch`, title: 'Put every stage on this page back to its start', onclick: () => resetSequence(ids) }),
-    el('label', { class: 'inline', style: 'gap:.35rem' }, ['Speed', el('select', { 'aria-label': 'Playback speed', onchange: (e) => { setAnimation({ speed: e.target.value }); for (const id of players.keys()) refresh(id); } },
-      Object.keys(SPEEDS).map((k) => el('option', { value: k, text: k, selected: k === speed })))]),
     el('span', { class: 'fig-caption', style: 'margin:0', dataset: { count: ids.join(',') }, text: `${done} of ${ids.length} stages played` }),
     el('span', { class: 'fig-caption tip', style: 'margin:0; flex-basis:100%', text: 'Tip: hover or tap any computed number to see how it was made.' + (isLab() ? ' Keys: Space plays, ← → step, Home/End jump; in tables ↑/↓ nudge a weight.' : '') }),
   ]);
@@ -588,9 +588,9 @@ export function groupControls(ids, { label = 'Play both together' } = {}) {
       if (!g.playing) return;
       stepAll(1);
       if (allAtEnd()) { g.playing = false; rerender(); return; }
-      g.timer = setTimeout(tick, speedMs());
+      g.timer = setTimeout(tick, speedMs(ids[0]));
     };
-    g.timer = setTimeout(tick, speedMs() * 0.6);
+    g.timer = setTimeout(tick, speedMs(ids[0]) * 0.6);
   };
   const btn = (name, title, onclick, disabled = false) => el('button', { class: 'pbtn', title, 'aria-label': title, html: icon(name), onclick, disabled });
   const steps = live().map((p) => p.step);
