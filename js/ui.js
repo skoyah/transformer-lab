@@ -3,7 +3,7 @@
 // worked examples and the "what just changed" panel. No maths lives here.
 
 import { STAGE_BY_ID, STAGES, shapeOf } from './transformer.js';
-import { getExperiment, onChange, setCurrentStep, undo, redo, setCoalescing, setView, LENS_SIZES } from './state.js';
+import { getExperiment, onChange, setCurrentStep, undo, redo, canUndo, canRedo, setCoalescing, setView, LENS_SIZES, setMode, isLab } from './state.js';
 
 export const CHAPTERS = [
   { href: 'index.html', n: 0, label: 'Start here', title: 'A transformer you can read' },
@@ -74,7 +74,7 @@ export function callout(kind, html, label, actions = null) {
         a.run();
         if (a.then) setTimeout(() => { const n = document.getElementById(a.then); if (n) n.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 30);
       } })),
-      el('span', { class: 'fig-caption', style: 'margin:0', text: '⌘Z / Ctrl-Z undoes any of these.' }),
+      undoButtons(true),
     ]) : null,
   ]);
 }
@@ -134,10 +134,12 @@ export function chapterNav(active) {
 export function compareToggle(onchange) {
   let on = false;
   try { on = sessionStorage.getItem('tl:compare') === '1'; } catch {}
-  return el('label', { class: 'compare-toggle' }, [
+  const trained = (getExperiment().trainingHistory || []).length > 0 || getExperiment().handEdited;
+  if (!trained) return labOnly(el('p', { class: 'fig-caption compare-toggle', text: 'Once you have trained the model (Chapter 5), a “compare with the untrained model” switch appears here.' }));
+  return labOnly(el('label', { class: 'compare-toggle' }, [
     el('input', { type: 'checkbox', checked: on, onchange: (e) => { try { sessionStorage.setItem('tl:compare', e.target.checked ? '1' : '0'); } catch {} onchange(e.target.checked); } }),
     'Compare with the untrained model (▲▼ = moved by training or editing)',
-  ]);
+  ]));
 }
 export function compareOn() { try { return sessionStorage.getItem('tl:compare') === '1'; } catch { return false; } }
 
@@ -148,6 +150,24 @@ export function tag(kind) {
 // ---------------------------------------------------------------------------
 // Page chrome
 // ---------------------------------------------------------------------------
+
+function applyMode() {
+  document.body.classList.toggle('mode-lab', isLab());
+  document.body.classList.toggle('mode-lesson', !isLab());
+  document.querySelectorAll('.mode-switch button').forEach((b) => b.classList.toggle('on', (b.dataset.mode === 'lab') === isLab()));
+}
+
+function updateUndoButtons() {
+  document.querySelectorAll('[data-undo]').forEach((b) => { b.disabled = !canUndo(); });
+  document.querySelectorAll('[data-redo]').forEach((b) => { b.disabled = !canRedo(); });
+}
+
+export function undoButtons(compact = false) {
+  return el('span', { class: 'undo-group' }, [
+    el('button', { class: compact ? 'ghost' : '', 'data-undo': '1', title: 'Undo the last change (⌘Z)', text: compact ? 'Undo' : '↶ Undo', disabled: !canUndo(), onclick: () => undo() }),
+    el('button', { class: compact ? 'ghost' : '', 'data-redo': '1', title: 'Redo (⇧⌘Z)', text: compact ? 'Redo' : '↷ Redo', disabled: !canRedo(), onclick: () => redo() }),
+  ]);
+}
 
 export function initPage(active) {
   setCurrentStep(active);
@@ -162,8 +182,16 @@ export function initPage(active) {
       el('select', { class: 'nav-select', 'aria-label': 'Chapter', onchange: (e) => { location.href = e.target.value; } },
         CHAPTERS.map((c) => el('option', { value: c.href, text: `${c.n} · ${c.label}`, selected: c.href === active }))),
       el('span', { class: 'nav-sentence', id: 'nav-sentence' }),
+      el('span', { class: 'nav-tools' }, [
+        undoButtons(true),
+        el('span', { class: 'mode-switch', title: 'Lesson: follow the class. Lab: every table editable, all the extras.' }, [
+          el('button', { dataset: { mode: 'lesson' }, text: 'Lesson', onclick: () => { setMode('lesson'); location.reload(); } }),
+          el('button', { dataset: { mode: 'lab' }, text: 'Lab', onclick: () => { setMode('lab'); location.reload(); } }),
+        ]),
+      ]),
     );
   }
+  applyMode();
   const updateSentence = () => {
     const s = document.getElementById('nav-sentence');
     if (s) s.textContent = `“${getExperiment().sentence}”`;
@@ -182,11 +210,14 @@ export function initPage(active) {
   onChange((event) => {
     updateSentence();
     updateMinimap();
+    updateUndoButtons();
     if (event.quiet) return;
     if (event.affected.length || event.reset || event.external) showRecalculation(event);
   });
   mountLog();
 }
+
+export const labOnly = (node) => { if (node) node.classList.add('lab-only'); return node; };
 
 // ---------------------------------------------------------------------------
 // Progress pill in the nav: "n of 21 stages played" with a thin bar. Links to
@@ -236,7 +267,7 @@ function heatStyle(value, mode, maxAbs) {
 //         pulse                 [r,c] cell that was just filled (pop animation) }
 export function matrixTable(opts) {
   const {
-    title, matrix, rowLabels, colLabels, editable = false, onEdit, heat = 'diverging',
+    title, matrix, rowLabels, colLabels, editable: editableOpt = false, onEdit, heat = 'diverging',
     decimals = 2, highlightRows = null, dimRows = null, cornerLabel = '', note = null, small = false,
     filled = null, hlRow = null, hlCol = null, hlCell = null, pulse = null,
     compare = null, // same-shaped matrix (e.g. the untrained model's): cells show how they moved
@@ -246,6 +277,7 @@ export function matrixTable(opts) {
   const allRows = Array.isArray(matrix[0]) ? matrix : [matrix];
   const shown = rowSubset || allRows.map((_, i) => i);
   const rows = shown.map((i) => allRows[i]);
+  const editable = editableOpt && isLab(); // in Lesson mode every table is read-only
   let maxAbs = 0;
   for (const row of rows) for (const v of row) if (Number.isFinite(v)) maxAbs = Math.max(maxAbs, Math.abs(v));
 
@@ -422,6 +454,7 @@ function announce(text) {
 function mountLog() {
   logEl = document.getElementById('recalc-log');
   if (!logEl) return;
+  logEl.hidden = true; // appears on the first change
   if (matchMedia('(max-width: 760px)').matches) logEl.classList.add('collapsed');
   logEl.replaceChildren(
     el('header', {}, [
@@ -458,6 +491,7 @@ let trainingRun = null; // { entry, steps, lossStart } — consecutive training 
 
 export function showRecalculation(event) {
   if (!logEl) return;
+  logEl.hidden = false;
   if (event.training && trainingRun && list().firstChild === trainingRun.entry) {
     trainingRun.steps += event.steps;
     trainingRun.entry.querySelector('.cause').textContent =
@@ -706,7 +740,7 @@ export function flowDiagram({ progress = {}, justDone = new Set(), chapters = []
     add('circle', { r: 8 }, a);
     add('title', {}, a).textContent = `${stage.label}${done ? ' — played' : ' — waiting for play'}`;
     const label = add('text', { x: 0, y: 22, 'text-anchor': 'middle', class: 'lbl' }, a);
-    label.textContent = stage.label.replace('Positional input X', 'Pos. input').replace('Attention scores', 'Scores').replace('Attention output', 'Attn out').replace('Probabilities', 'Probs');
+    label.textContent = stage.label.replace('Input X (with positions)', 'Input X').replace('Attention scores', 'Scores').replace('Attention output Z', 'Output Z').replace('Attention shares', 'Shares').replace('Probabilities', 'Probs').replace('K flipped (Kᵀ)', 'Kᵀ').replace('Thinking (expanded)', 'Think ×2').replace('Thinking (result)', 'Think').replace(/^(Questions|Badges|Notes) /, '');
     if (stage.inputs.length) {
       const t = add('text', { x: 0, y: 34, 'text-anchor': 'middle', class: 'inp' }, a);
       t.textContent = stage.inputs.map((k) => k.replace('weights.', '').replace('config.', '').replace('embedding', 'E').replace('positional', 'P')).join(' ');
@@ -770,7 +804,7 @@ export function lensBar(tokens) {
       el('span', { class: 'lens-ctl' }, [
         el('button', { class: 'pbtn', title: 'Earlier positions', 'aria-label': 'Earlier positions', text: '‹', disabled: win.start === 0, onclick: () => setView({ start: win.start - win.size }) }),
         el('button', { class: 'pbtn', title: 'Later positions', 'aria-label': 'Later positions', text: '›', disabled: win.end >= n, onclick: () => setView({ start: win.start + win.size }) }),
-        el('select', { 'aria-label': 'Window size', onchange: (e) => setView({ size: Number(e.target.value) }) }, LENS_SIZES.map((k) => el('option', { value: k, text: `${k} positions`, selected: k === v.size }))),
+        labOnly(el('select', { 'aria-label': 'Window size', onchange: (e) => setView({ size: Number(e.target.value) }) }, LENS_SIZES.map((k) => el('option', { value: k, text: `${k} positions`, selected: k === v.size })))),
       ]),
     ]),
     strip,

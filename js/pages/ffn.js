@@ -1,5 +1,5 @@
 import { getExperiment, getDerived, setWeightCell, setWeights } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly } from '../ui.js';
 import { player, chapterControls, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, vec } from '../scenes.js';
 
@@ -96,7 +96,7 @@ function render() {
       },
       done: 'Zeros are where ReLU said no.',
     }) }),
-    el('div', { class: 'card flush fires' }, [
+    labOnly(el('div', { class: 'card flush fires' }, [
       el('strong', { style: 'font: 600 13px/1.3 var(--sans)', text: 'What each hidden unit responds to' }),
       el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .5rem', text: 'A hidden unit “fires” for a token when ReLU lets its value through. Untrained, this is noise; after training, units tend to specialise.' }),
       el('div', { class: 'fires-list' }, hid.map((h, j) => {
@@ -107,7 +107,7 @@ function render() {
           el('span', { text: firing.length ? ` fires for ${shown.map((x) => `${x.t} (${fmt(x.v, 1)})`).join(', ')}${firing.length > 8 ? ` … ${firing.length} positions in all` : ''}` : ' never fires for this text' }),
         ]);
       })),
-    ]),
+    ])),
     player({ id: 'ffnOutput', scene: matmulScene({
       A: W(d.ffnHidden), B: s.weights.W2, C: W(d.ffnOutput), aTitle: 'H', bTitle: 'W₂', cTitle: 'F', aRows: toks, aCols: hid, bCols: dims,
       idle: 'Press play to squeeze each row back to the usual size.',

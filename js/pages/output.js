@@ -1,6 +1,6 @@
 import { crossEntropy, lossOf, cloneWeights } from '../transformer.js';
 import { getExperiment, getDerived, setWeightCell, setWeights, setLearningRate, setCausal, train, trainStepAsync, trainMany, untrainedExperiment, usedIds } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly } from '../ui.js';
 import { player, chapterControls, pauseAll, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, predictionScene, vec } from '../scenes.js';
 
@@ -94,7 +94,7 @@ function render() {
   const step = -s.learningRate * slope;
   const names = ['Wout', 'Wq', 'Wk', 'Wv', 'W1', 'W2', 'embedding', 'positional', 'b1', 'b2'];
   const is1d = !Array.isArray(s.weights[nudgeName][0]);
-  const nudgeBox = el('div', { class: 'card nudge' }, [
+  const nudgeBox = labOnly(el('div', { class: 'card nudge' }, [
     el('strong', { style: 'font: 600 14px/1.3 var(--sans)', text: 'Nudge one number yourself' }),
     el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .7rem', text: 'The slow, honest way, for one number: the model is re-run with the weight a hair higher and a hair lower. Backpropagation gets the same slope for every number in one pass.' }),
     el('div', { class: 'controls' }, [
@@ -112,7 +112,7 @@ function render() {
       el('button', { class: 'primary', text: 'Apply this one nudge', onclick: () => setWeightCell(nudgeName, is1d ? 0 : nr, nc, Math.round((w0 + step) * 1e6) / 1e6) }),
       el('span', { class: 'fig-caption', style: 'margin:0', text: 'A full training step applies the nudge to every number at once.' }),
     ]),
-  ]);
+  ]));
 
   const scoring = lesson('Score every word in the dictionary', [
     prose(`<p>Each token now has a final vector (N₂ from Chapter 4). To turn that into a guess about the next piece, we need one more table: <strong>Wout</strong>, with one row per piece in the dictionary — all ${V} of them. The score for a candidate piece is the dot product of the token's vector with that piece's row — the same “how well do these two match” operation attention used.</p>`),

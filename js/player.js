@@ -7,7 +7,7 @@
 // where k = 0 is the idle state and k = total is the finished result.
 
 import { el } from './ui.js';
-import { getExperiment, onChange, setAnimation, setProgress, clearProgress } from './state.js';
+import { getExperiment, onChange, setAnimation, setProgress, clearProgress, isLab } from './state.js';
 
 export const SPEEDS = { slow: 2400, normal: 1300, fast: 500 };
 
@@ -384,18 +384,19 @@ function toolbar(id) {
   const btn = (name, title, onclick, disabled = false) => el('button', { class: 'pbtn', title, 'aria-label': title, html: icon(name), onclick, disabled });
   const scrub = el('input', { type: 'range', min: 0, max: p.total, value: p.step, class: 'scrub', 'aria-label': 'step',
     oninput: (e) => { pause(id); setStep(id, Number(e.target.value)); } });
+  const lab = isLab();
   return el('div', { class: 'player-bar' }, [
-    btn('start', 'Back to start', () => { pause(id); setStep(id, 0); }, atStart),
-    btn('prev', 'Previous step', () => { pause(id); setStep(id, p.step - 1); }, atStart),
+    lab ? btn('start', 'Back to start', () => { pause(id); setStep(id, 0); }, atStart) : null,
+    lab ? btn('prev', 'Previous step', () => { pause(id); setStep(id, p.step - 1); }, atStart) : null,
     p.playing
       ? btn('pause', 'Pause', () => pause(id))
-      : btn('play', atEnd ? 'Play again' : 'Play', () => play(id)),
+      : el('button', { class: 'pbtn play-main', title: atEnd ? 'Play again' : 'Play', html: `${icon('play')}<span>${atEnd ? 'Play again' : p.step ? 'Continue' : 'Play'}</span>`, onclick: () => play(id) }),
     btn('next', 'Next step', () => { pause(id); setStep(id, p.step + 1); }, atEnd),
-    btn('end', 'Skip to the end', () => { pause(id); setStep(id, p.total); }, atEnd),
+    lab ? btn('end', 'Skip to the end', () => { pause(id); setStep(id, p.total); }, atEnd) : null,
     el('span', { class: 'counter', text: `${p.step} / ${p.total}` }),
     scrub,
-    el('select', { class: 'speed', 'aria-label': 'Speed', onchange: (e) => { setAnimation({ speed: e.target.value }); for (const other of players.keys()) refresh(other); } },
-      Object.keys(SPEEDS).map((k) => el('option', { value: k, text: k, selected: k === speed }))),
+    lab ? el('select', { class: 'speed', 'aria-label': 'Speed', onchange: (e) => { setAnimation({ speed: e.target.value }); for (const other of players.keys()) refresh(other); } },
+      Object.keys(SPEEDS).map((k) => el('option', { value: k, text: k, selected: k === speed }))) : null,
   ]);
 }
 
@@ -492,10 +493,13 @@ export function finishSequence(ids) {
 export function chapterControls(ids) {
   const s = getExperiment();
   const done = ids.filter((id) => s.progress[id] === 'done').length;
+  const speed = s.animation.speed || 'normal';
   return el('div', { class: 'chapter-controls' }, [
-    el('button', { class: 'primary', html: `${icon('play')} Play this chapter`, onclick: () => playSequence(ids) }),
-    el('button', { html: `${icon('end')} Reveal everything`, onclick: () => finishSequence(ids) }),
-    el('button', { class: 'ghost', html: `${icon('start')} Reset chapter`, onclick: () => resetSequence(ids) }),
+    el('button', { class: 'primary', html: `${icon('play')} Play the whole chapter`, title: 'Plays every stage on this page in order', onclick: () => playSequence(ids) }),
+    el('button', { html: `${icon('end')} Skip the animations`, title: 'Show every stage finished', onclick: () => finishSequence(ids) }),
+    el('button', { class: 'ghost', html: `${icon('start')} Replay from scratch`, title: 'Put every stage on this page back to its start', onclick: () => resetSequence(ids) }),
+    el('label', { class: 'inline', style: 'gap:.35rem' }, ['Speed', el('select', { 'aria-label': 'Playback speed', onchange: (e) => { setAnimation({ speed: e.target.value }); for (const id of players.keys()) refresh(id); } },
+      Object.keys(SPEEDS).map((k) => el('option', { value: k, text: k, selected: k === speed })))]),
     el('span', { class: 'fig-caption', style: 'margin:0', dataset: { count: ids.join(',') }, text: `${done} of ${ids.length} stages played` }),
   ]);
 }

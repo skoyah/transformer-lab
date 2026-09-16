@@ -334,8 +334,9 @@ input[type=range] { width: 12rem; accent-color: var(--accent); }
 }
 .pbtn { width: 2rem; height: 2rem; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: var(--ink-soft); }
 .pbtn:disabled { opacity: .3; }
-.player-bar .pbtn:nth-child(3) { background: var(--accent); color: #fff; border-color: var(--accent); width: 2.4rem; }
-.player.playing .player-bar .pbtn:nth-child(3) { background: var(--warm); border-color: var(--warm); }
+.player-bar .play-main { background: var(--accent); color: #fff; border-color: var(--accent); }
+.player-bar .play-main:hover { background: var(--accent); filter: brightness(1.08); }
+.player.playing .player-bar .pbtn[title="Pause"] { background: var(--warm); border-color: var(--warm); color: #fff; width: 2.4rem; }
 .player-bar .counter { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 4.2rem; text-align: center; }
 .player-bar .scrub { flex: 1; min-width: 6rem; margin: 0 .3rem; }
 .player-bar .speed { font-size: 12px; padding: .25rem .4rem; }
@@ -558,3 +559,18 @@ table.matrix td.unmoved { opacity: .55; }
 .tok-any { display: flex; flex-wrap: wrap; gap: .8rem 1.2rem; align-items: center; }
 .tok-any input { flex: 1 1 16rem; font-family: var(--serif); font-size: 1.1rem; }
 .tok-any .stats { font: 13px/1.4 var(--sans); color: var(--muted); }
+
+/* ---------- lesson / lab mode ---------- */
+body.mode-lesson .lab-only { display: none !important; }
+.nav-tools { display: inline-flex; align-items: center; gap: .6rem; margin-left: .6rem; }
+.undo-group { display: inline-flex; gap: .15rem; }
+.undo-group button { font-size: 12.5px; padding: .25rem .5rem; }
+.undo-group button:disabled { opacity: .35; }
+.mode-switch { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 999px; overflow: hidden; }
+.mode-switch button { border: 0; border-radius: 0; background: transparent; font-size: 12.5px; padding: .3rem .7rem; color: var(--muted); }
+.mode-switch button.on { background: var(--accent); color: #fff; }
+.pbtn.play-main { width: auto; padding: 0 .8rem; gap: .35rem; font: 600 13px/1 var(--sans); }
+.pbtn.play-main span { display: inline-block; }
+.chapter-controls label.inline { font-size: 13px; }
+.chapter-controls select { font-size: 12.5px; padding: .25rem .4rem; }
+@media (max-width: 760px) { .nav-tools .undo-group { display: none; } }

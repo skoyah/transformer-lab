@@ -1,6 +1,6 @@
-import { getExperiment, getDerived, setWeightCell, setWeights, setCausal, untrainedExperiment } from '../state.js';
+import { getExperiment, getDerived, setWeightCell, setWeights, setCausal, untrainedExperiment, isLab } from '../state.js';
 import { forward } from '../transformer.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, sliceBoth, sliceCols, lensBar } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, sliceBoth, sliceCols, lensBar, labOnly } from '../ui.js';
 import { SPEEDS } from '../player.js';
 import { player, chapterControls } from '../player.js';
 import { matmulScene, rowScene, transposeScene, vec, cellRef } from '../scenes.js';
@@ -52,19 +52,19 @@ function render() {
       <p>Everyone compares their question with every badge in the room. The better a badge matches, the more of that person's note they take. What they end up holding is a blend of notes, weighted by how relevant each person was.</p>`),
   ]);
 
-  const lenses = lesson('Three lenses on the same input', [
-    prose(`<p>Where do the question, badge and note come from? From the same row of X, seen through three different small weight tables: <strong>Wq</strong>, <strong>Wk</strong> and <strong>Wv</strong>. Each is ${s.config.dim}×${s.config.dim} and each is <span class="tag stored">saved</span> and learned.</p>`),
+  const lenses = lesson('Three views of the same row', [
+    prose(`<p>Where do the question, badge and note come from? From the same row of X, seen through three different small weight tables: <strong>Wq</strong>, <strong>Wk</strong> and <strong>Wv</strong>. Each is ${s.config.dim}×${s.config.dim} and each is <span class="tag stored">saved</span> and learned.${isLab() ? '' : ' (In Lab mode you can edit them.)'}</p>`),
     lensBar(d.tokens),
     figure(null, [matrixTable({ title: 'X (from Chapter 2)', matrix: X, rowLabels: toks, colLabels: dims })], 'The input: one row per token.'),
     el('div', { class: 'card figure' }, [
       el('div', { class: 'figure-row' }, [weightTable('Wq', 'Wq — makes questions'), weightTable('Wk', 'Wk — makes badges'), weightTable('Wv', 'Wv — makes notes')]),
       el('p', { class: 'fig-caption', text: 'Edit a cell of Wq and only the question side needs replaying: Q, then the scores, then everything after. K and V keep their results.' }),
-      el('div', { class: 'presets' }, [
+      labOnly(el('div', { class: 'presets' }, [
         el('span', { class: 'fig-caption', style: 'margin:0', text: 'Presets to get a feel for the heatmap:' }),
         el('button', { text: 'Attend to yourself', title: 'Wq = Wk = 3·I — a question matches its own badge best (usually; two positions with similar rows can still tie)', onclick: () => setWeights({ Wq: identity(3), Wk: identity(3) }) }),
         el('button', { text: 'Attend evenly', title: 'Wq = 0 — every score is 0, so every visible word gets an equal share', onclick: () => setWeights({ Wq: identity(0) }) }),
         el('span', { class: 'fig-caption', style: 'margin:0', text: '⌘Z to undo.' }),
-      ]),
+      ])),
     ]),
     prose(`<p>Multiplying X by each table gives three new tables with one row per token. Each cell is a dot product: a row of X against a column of the weight table.</p>`),
     projection('Q', 'Wq', 'Q — questions', 'question per token'),
@@ -157,7 +157,7 @@ function render() {
       { label: s.config.causal ? 'Allow peeking' : 'No peeking again', run: () => setCausal(!getExperiment().config.causal), then: 'scaledScores' },
     ]),
     callout('key', `<p>Attention is just: <em>score every pair, turn scores into shares, blend</em>. Real models run several of these side by side (“heads”, each working on a slice of the numbers, their results joined by one more table) and stack many layers — but each head does exactly what this page does.</p>`),
-    callout('key', `<p><strong>Why the trained heatmap stays flat here.</strong> On a single text the model can memorise the answer without choosing where to look: every position's past is unique, so “take the average of what came before, then think” is enough. Attention earns its keep when the same pieces in a different order must give a different answer — many different texts, not one. The presets above show what a sharp pattern looks like; a model trained on real text learns patterns like them on its own.</p>`, 'Honest note'),
+    callout('key', `<p><strong>Why the trained heatmap stays flat here.</strong> On a single text the model can memorise the answer without choosing where to look: every position's past is unique, so “take the average of what came before, then think” is enough. Attention earns its keep when the same pieces in a different order must give a different answer — many different texts, not one. ${isLab() ? 'The presets above show what a sharp pattern looks like; a' : 'A'} model trained on real text learns sharp patterns on its own.</p>`, 'Honest note'),
   ]);
 
   content.replaceChildren(chapterControls(STAGES_HERE), why, lenses, scoring, tidy, softmax, collect, chapterNav('attention.html'));

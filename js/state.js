@@ -82,6 +82,7 @@ export function createExperiment(overrides = {}) {
     progress: {},            // stageId -> 'done' once the reader has played it to the end
     playground: { prompt: 'the cat', steps: 4, temperature: 0 },
     view: { start: 0, size: 12 },  // the lens: which positions the tables show
+    mode: 'lesson',                // 'lesson' (follow the class) or 'lab' (everything editable)
     currentStep: 'index.html',
     updatedAt: Date.now(),
   };
@@ -139,6 +140,7 @@ setTimeout(() => { lastCommitted = experimentOnly(); }, 0);
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
 if (!state.progress) state.progress = {};
 if (!state.view) state.view = { start: 0, size: 12 };
+if (!state.mode) state.mode = 'lesson';
 // The dictionary is the tokenizer's fixed vocabulary. Older saves (a growing
 // dictionary, other tokenizers) are moved onto it; rows of pieces that already
 // existed keep their trained values, the rest are seeded as usual.
@@ -275,7 +277,7 @@ if (typeof window !== 'undefined') {
     // playground, animation, …) are quiet; anything touching the model recalculates.
     const changedKeys = Object.keys({ ...state, ...incoming }).filter((k) => k !== 'updatedAt' && JSON.stringify(state[k]) !== JSON.stringify(incoming[k]));
     state = incoming;
-    const QUIET = new Set(['progress', 'playground', 'animation', 'currentStep', 'snapshots', 'learningRate', 'handEdited']);
+    const QUIET = new Set(['progress', 'playground', 'animation', 'currentStep', 'snapshots', 'learningRate', 'handEdited', 'view', 'mode', 'notice']);
     if (changedKeys.length && changedKeys.every((k) => QUIET.has(k))) {
       const event = { changedKeys, affected: [], state, quiet: true, external: true };
       for (const fn of listeners) fn(event);
@@ -387,6 +389,12 @@ export function setAnimation(prefs) {
   state.animation = { ...state.animation, ...prefs };
   commitQuiet(['animation']);
 }
+
+export function setMode(mode) {
+  state.mode = mode === 'lab' ? 'lab' : 'lesson';
+  commitQuiet(['mode']);
+}
+export function isLab() { return state.mode === 'lab'; }
 
 // The lens is a viewing preference: it never changes the model.
 export function setView(partial) {
