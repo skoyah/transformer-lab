@@ -79,6 +79,7 @@ function render() {
       initial: bpe.initial, merges: bpe.merges, steps: bpe.steps, corpusWords, totalMerges: bpe.merges.length,
       idle: `Press play to watch the first ${BPE_PLAYER_STEPS} of the ${bpe.merges.length} merges being learned from the corpus. Each step first lights up every place the winning pair occurs, then glues it. ▁ is the space byte in front of a word, so “${WORD_START}t” (t starting a word) and “t” (t inside a word) are different symbols.`,
     }) }),
+    lensBar(d.tokens),
     prose(`<p>With the merges learned, tokenising is mechanical: cut every word into bytes and apply the ${bpe.merges.length} merges in order. Your text is ${chars} characters, ${words.length} words, and ${d.tokens.length} tokens. Each token also gets a <strong>position</strong>, 0 for the first, 1 for the second, and so on. Hold on to that; it matters in Chapter 2.</p>`),
     player({ id: 'tokens', scene: tokenizeScene({ sentence: s.sentence, tokens: d.tokens, spans: tokenSpans(s.sentence, tok), win, idle: `Press play to scan the sentence and pull out one token at a time${win.partial ? ` (positions ${win.start}–${win.end - 1}; slide the lens for the rest)` : ''}.` }) }),
     tokeniseAnything(cut),
@@ -103,7 +104,7 @@ function render() {
       `<p>Byte-pair encoding: Sennrich, Haddow &amp; Birch (2016); the byte-level variant with a leading-space convention is GPT-2's (Radford et al. 2019). Other subword families exist — WordPiece (BERT) and Unigram (T5) — and solve the same problem. The vocabulary only ever grows: a new piece is appended, existing IDs are never renumbered, so every piece's row in the embedding table (next chapter) stays put.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), lensBar(d.tokens.length), intro, pieces, numbering, chapterNav('tokens.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), intro, pieces, numbering, chapterNav('tokens.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

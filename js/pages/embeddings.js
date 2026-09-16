@@ -34,6 +34,7 @@ function render() {
   ]);
 
   const lookup = lesson('Look up each token', [
+    lensBar(d.tokens),
     prose(`<p>Turning IDs into embeddings is not a calculation, it's a lookup: position <em>i</em> simply copies row <code>id[i]</code> of the table. The result has one row per token.</p>`),
     player({ id: 'embeddings', scene: lookupScene({
       table: { title: 'E', matrix: s.weights.embedding, rowLabels: s.vocab.map((w, i) => `${i} ${w}`), colLabels: dims },
@@ -87,7 +88,7 @@ function render() {
     underHood('X[i] = E[ id[i] ] + P[i]', `<p>E is <code>vocab × d</code>, P is <code>positions × d</code>, X is <code>tokens × d</code>. Real models often learn P too, or use cleverer position tricks, but “add a position pattern” is the core idea.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), lensBar(n), location, lookup, positions, x, chapterNav('embeddings.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), location, lookup, positions, x, chapterNav('embeddings.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

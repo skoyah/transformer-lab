@@ -39,6 +39,7 @@ function render() {
   const wt = W(d.tokens);
 
   const residual = lesson('Keep the original, add what you heard', [
+    lensBar(d.tokens),
     prose(`<p>After attention, each word holds Z — a blend of other words' notes. But we don't want the word to <em>forget itself</em>. So instead of replacing X with Z, we add them: the word keeps its own row and gets the gathered information on top. This is called a <strong>residual connection</strong>, and it is one of the reasons deep networks are trainable at all.</p>`),
     callout('idea', `<p>It's editing with track changes rather than retyping the document. The original text stays; attention only has to propose the <em>changes</em>. Small, safe edits are much easier to learn than rewriting everything from scratch.</p>`),
     player({ id: 'residual1', scene: rowScene({
@@ -144,7 +145,7 @@ function render() {
     callout('key', `<p>A transformer block is two moves, each wrapped in “add to the original and normalise”: <em>attention</em> (words exchange information) and <em>feed-forward</em> (each word processes it alone).</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), lensBar(n), residual, norm, think, again, chapterNav('ffn.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), residual, norm, think, again, chapterNav('ffn.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

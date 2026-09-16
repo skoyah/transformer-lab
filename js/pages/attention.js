@@ -54,6 +54,7 @@ function render() {
 
   const lenses = lesson('Three lenses on the same input', [
     prose(`<p>Where do the question, badge and note come from? From the same row of X, seen through three different small weight tables: <strong>Wq</strong>, <strong>Wk</strong> and <strong>Wv</strong>. Each is ${s.config.dim}×${s.config.dim} and each is <span class="tag stored">saved</span> and learned.</p>`),
+    lensBar(d.tokens),
     figure(null, [matrixTable({ title: 'X (from Chapter 2)', matrix: X, rowLabels: toks, colLabels: dims })], 'The input: one row per token.'),
     el('div', { class: 'card figure' }, [
       el('div', { class: 'figure-row' }, [weightTable('Wq', 'Wq — makes questions'), weightTable('Wk', 'Wk — makes badges'), weightTable('Wv', 'Wv — makes notes')]),
@@ -158,7 +159,7 @@ function render() {
     callout('key', `<p>Attention is just: <em>score every pair, turn scores into shares, blend</em>. Real models run several of these side by side (“heads”) and stack many layers, but each head is exactly this page.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), lensBar(n), why, lenses, scoring, tidy, softmax, collect, chapterNav('attention.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), why, lenses, scoring, tidy, softmax, collect, chapterNav('attention.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

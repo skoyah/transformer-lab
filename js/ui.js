@@ -729,20 +729,48 @@ export const sliceBoth = (m, win) => win.rows.map((i) => win.rows.map((j) => m[i
 export const sliceCols = (m, win) => m.map((r) => win.rows.map((j) => r[j]));
 export function tokenLabelsWin(tokens, win) { return win.rows.map((i) => `${tokens[i]} ${i}`); }
 
-export function lensBar(n) {
+// The lens bar: a strip of the whole text with the visible window marked.
+// Click or drag on the strip to move the window; chevrons page through it.
+export function lensBar(tokens) {
+  const n = tokens.length;
   const win = windowOf(n);
   if (!win.partial) return null;
   const v = getExperiment().view;
-  const slider = el('input', { type: 'range', min: 0, max: n - win.size, value: win.start, 'aria-label': 'Window start', style: 'flex:1; min-width: 8rem',
-    oninput: (e) => setView({ start: Number(e.target.value) }) });
-  return el('div', { class: 'lens' }, [
-    el('span', { class: 'lens-label', text: 'Lens' }),
-    el('button', { class: 'pbtn', title: 'Earlier positions', html: '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M11 3 4 8l7 5z"/></svg>', disabled: win.start === 0, onclick: () => setView({ start: win.start - win.size }) }),
-    el('span', { class: 'lens-range', text: `positions ${win.start}–${win.end - 1} of ${n}` }),
-    el('button', { class: 'pbtn', title: 'Later positions', html: '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M5 3l7 5-7 5z"/></svg>', disabled: win.end >= n, onclick: () => setView({ start: win.start + win.size }) }),
-    slider,
-    el('select', { 'aria-label': 'Window size', onchange: (e) => setView({ size: Number(e.target.value) }) }, LENS_SIZES.map((k) => el('option', { value: k, text: `${k} at a time`, selected: k === v.size }))),
-    el('span', { class: 'fig-caption', style: 'margin:0; flex-basis:100%', text: 'Your text is longer than one screen of rows. The maths runs on all of it; the tables below show this window of positions.' }),
+  const strip = el('div', { class: 'lens-strip', title: 'Drag to choose which positions the tables show' }, tokens.map((t, i) => el('span', {
+    class: `cell ${i >= win.start && i < win.end ? 'in' : ''}`, title: `${i}: ${t}`,
+  })));
+  const window_ = el('div', { class: 'lens-window', style: `left:${(win.start / n) * 100}%; width:${(win.size / n) * 100}%` });
+  strip.append(window_);
+  const pick = (clientX) => {
+    const r = strip.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    setView({ start: Math.round(frac * n - win.size / 2) });
+  };
+  strip.addEventListener('pointerdown', (e) => {
+    pick(e.clientX);
+    const move = (ev) => pick(ev.clientX);
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+  const preview = el('div', { class: 'lens-preview' }, [
+    win.start > 0 ? el('span', { class: 'dim', text: `… ${tokens.slice(Math.max(0, win.start - 3), win.start).join(' ')} ` }) : null,
+    el('span', { class: 'in', text: tokens.slice(win.start, win.end).join(' ') }),
+    win.end < n ? el('span', { class: 'dim', text: ` ${tokens.slice(win.end, win.end + 3).join(' ')} …` }) : null,
+  ]);
+  return el('div', { class: 'lens', role: 'group', 'aria-label': 'Lens' }, [
+    el('div', { class: 'lens-head' }, [
+      el('span', { class: 'lens-label', text: 'Lens' }),
+      el('span', { class: 'lens-range', text: `the tables below show positions ${win.start}–${win.end - 1} of your ${n} tokens` }),
+      el('span', { class: 'lens-ctl' }, [
+        el('button', { class: 'pbtn', title: 'Earlier positions', 'aria-label': 'Earlier positions', text: '‹', disabled: win.start === 0, onclick: () => setView({ start: win.start - win.size }) }),
+        el('button', { class: 'pbtn', title: 'Later positions', 'aria-label': 'Later positions', text: '›', disabled: win.end >= n, onclick: () => setView({ start: win.start + win.size }) }),
+        el('select', { 'aria-label': 'Window size', onchange: (e) => setView({ size: Number(e.target.value) }) }, LENS_SIZES.map((k) => el('option', { value: k, text: `${k} positions`, selected: k === v.size }))),
+      ]),
+    ]),
+    strip,
+    preview,
+    el('p', { class: 'fig-caption', style: 'margin:.35rem 0 0', text: 'The maths runs on the whole text; this only chooses which rows you look at. Drag the strip or use ‹ › to move.' }),
   ]);
 }
 

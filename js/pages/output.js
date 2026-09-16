@@ -114,6 +114,7 @@ function render() {
         highlightRows: new Set(s.tokenIds), onEdit: (r, c, v) => setWeightCell('Wout', r, c, v), compare: fresh ? fresh.weights.Wout : null }),
       el('p', { class: 'fig-caption', text: 'Sometimes called the “unembedding”: it maps from coordinates back to words.' }),
     ]),
+    lensBar(d.tokens),
     player({ id: 'logits', scene: matmulScene({
       A: W(d.norm2), B: s.weights.Wout, C: W(d.logits), aTitle: 'N₂', bTitle: 'Wout', cTitle: 'Scores', aRows: toks, aCols: dims, bCols: vocabLabels, bByRow: true,
       idle: 'Press play to score each candidate word at each position.',
@@ -189,7 +190,7 @@ function render() {
     underHood('loss = mean over t of −log P[t][ id[t+1] ]        w ← w − lr · ∂loss/∂w', `<p>Gradients come from backpropagation (js/transformer.js, <code>gradients()</code>): softmax + cross-entropy → output projection → layer norm → feed-forward → layer norm → attention (softmax, scaling, Q/K/V) → embeddings and positions, each block the exact reverse of its forward line. The test suite checks it against central finite differences, (loss(w+ε) − loss(w−ε)) / 2ε, to 1e-6.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), lensBar(n), scoring, betting, learning, chapterNav('output.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), scoring, betting, learning, chapterNav('output.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });
