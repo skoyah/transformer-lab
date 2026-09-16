@@ -23,7 +23,11 @@ const STAGE_WHAT = {
   logits: 'score every piece in the dictionary', probs: 'turn scores into a bet', prediction: 'pick the favourite',
 };
 
+const words = (text) => (text.trim().match(/\S+/g) || []).length;
 const isByte = (piece) => /⟨[0-9A-F]{2}⟩/.test(piece);
+// Pieces back to readable text: ▁ is a space; raw bytes stay visible as ⟨..⟩.
+const readable = (pieces) => pieces.map((t) => t.replace(/^▁/, ' ')).join('').replace(/\s+/g, ' ');
+const confidence = (p) => (p > 0.6 ? 'and it is fairly sure' : p > 0.25 ? 'though it is not sure' : 'but it is mostly guessing');
 
 function heroPanel() {
   const s = getExperiment();
@@ -54,28 +58,34 @@ function heroPanel() {
     el('div', { class: 'hero' }, [
       el('div', { class: 'card' }, [
         el('h3', { style: 'margin-top:0', text: 'Your text' }),
-        prose(`<p>Everything in this book is computed from this text. A sentence is easiest to follow; up to ${MAX_TOKENS} tokens work. Press Enter to apply.</p>`),
+        prose(`<p>Everything in this book is computed from this text — the model will learn to continue it. A sentence or two is best. Press Enter to apply.</p>`),
         sentence,
         problem,
-        el('p', { class: 'fig-caption', text: `${d.tokens.length} tokens · ${s.config.dim} numbers per token · ${steps ? `trained ${steps} step${steps === 1 ? '' : 's'}` : 'not trained yet'}` }),
+        el('p', { class: 'fig-caption', text: `${words(s.sentence)} words · ${steps ? `trained ${steps} step${steps === 1 ? '' : 's'}` : 'not trained yet'}` }),
       ]),
       el('div', { class: 'card demo' }, [
         el('h3', { style: 'margin-top:0', text: 'What the model does' }),
-        el('p', { class: 'fig-caption', style: 'margin:0 0 .5rem', text: `Your text ends with “${d.tokens[last]}”. Its three best bets for what comes next:` }),
-        el('div', { class: 'keyboard' }, top.map((t, i) => el('span', { class: `key ${i === 0 ? 'best' : ''}`, title: isByte(s.vocab[t.id]) ? 'a raw byte — not even a letter' : '' }, [s.vocab[t.id], el('small', { text: pct(t.p) })]))),
-        el('p', { class: 'fig-caption', style: 'margin:.7rem 0 .3rem', text: 'Left to keep writing after the last words of your text, it adds:' }),
-        el('div', { class: 'chips' }, [
-          ...s.tokenIds.slice(Math.max(0, last - 3), last + 1).map((id) => el('span', { class: 'chip prompt', title: 'the end of your text', text: s.vocab[id] })),
-          el('span', { class: 'op', style: 'font-size:1.1rem', text: '→' }),
-          ...written.map((g) => el('span', { class: 'chip gen', style: `--conf:${g.prob.toFixed(2)}` }, [g.token, el('small', { text: pct(g.prob) })])),
+        prose(`<p>One job, only ever this one: <strong>read some text and guess what comes next.</strong> Here it is doing that on the end of your text:</p>`),
+        el('div', { class: 'demo-line' }, [
+          el('span', { class: 'demo-ctx', text: `…${readable(s.tokenIds.slice(Math.max(0, last - 4), last + 1).map((id) => s.vocab[id]))}` }),
+          el('span', { class: 'demo-arrow', text: '→' }),
+          el('span', { class: 'demo-guess', title: 'its best guess' }, readable([s.vocab[top[0].id]]).trim() || '·'),
         ]),
-        el('p', { class: 'fig-caption', style: 'margin:.7rem 0 0', text: steps
-          ? `That is the whole game: bet on the next piece. Its surprise on your text is ${fmt(loss, 2)} — as if it were hesitating between ${eff < 10 ? eff.toFixed(1) : Math.round(eff)} equally likely pieces out of the ${V} it knows.`
-          : `That is the whole game: bet on the next piece. Untrained, it has no idea: every one of its ${V} pieces looks about equally likely (1% each), so its “best bets” are random — some are raw bytes like ⟨B1⟩ that never form a word. By Chapter 5 you will have trained it; by Chapter 6 it runs as a phone-keyboard autocomplete.` }),
+        el('p', { class: 'fig-caption', style: 'margin:.4rem 0 0', text: steps
+          ? `Its best guess for the next word, ${confidence(top[0].p)}. Runners-up: ${top.slice(1).map((t) => `“${readable([s.vocab[t.id]]).trim()}”`).join(', ')}.`
+          : `That is a random scrap${isByte(s.vocab[top[0].id]) ? ' (not even a whole letter)' : ''} — the model is untrained, so every guess is as good as any other. That is what “learning nothing yet” looks like.` }),
+        el('p', { class: 'fig-caption', style: 'margin:.8rem 0 .2rem', text: 'If we let it keep going, adding its own guesses one at a time, it writes:' }),
+        el('p', { class: 'demo-written' }, [
+          el('span', { class: 'demo-ctx', text: `…${readable(s.tokenIds.slice(Math.max(0, last - 4), last + 1).map((id) => s.vocab[id]))}` }),
+          el('span', { class: 'demo-gen', text: readable(written.map((g) => g.token)) }),
+        ]),
+        el('p', { class: 'fig-caption', style: 'margin:.8rem 0 0', text: steps
+          ? `You have trained it ${steps} step${steps === 1 ? '' : 's'}; a phone keyboard does exactly this when it suggests your next word, and a chatbot does it over and over, one word at a time.`
+          : `Gibberish, for now. By Chapter 5 you will have trained it on your text; by Chapter 6 it runs as a phone-keyboard autocomplete. Every chapter in between shows one step of how it turns text into a guess.` }),
       ]),
     ]),
-    prose(`<p>A phone keyboard does this when it suggests your next word; a chatbot does it in a loop, one piece at a time. The machine behind it is a <strong>transformer</strong>, and this book walks through a real, tiny one: every number is on screen, and you press play to watch each step happen.</p>
-      <p>The model has only one kind of memory: its <strong>weights</strong> — a few thousand numbers, in a handful of tables, that training is allowed to change. Everything else you will see is worked out from them and from your text. A chatbot's weights number in the billions; the tables are just bigger.</p>`),
+    prose(`<p>The machine that makes that guess is a <strong>transformer</strong> — the same kind of machine that powers chatbots, only tiny. This book walks through a real one: every number is on screen, and you press play to watch each step happen.</p>
+      <p>Two things to hold on to. First, the model only ever does that one job, guess the next bit of text; everything a chatbot seems to “know” comes from getting good at it. Second, the only thing it can learn is a set of numbers called its <strong>weights</strong> — a few thousand here, billions in a chatbot. Training means nudging those numbers until the guesses get better. Everything else you will see is worked out from them and from your text.</p>`),
     el('div', { class: 'start-row' }, [
       el('button', { class: 'primary big', text: s.currentStep && s.currentStep !== 'index.html' ? 'Continue reading →' : 'Start Chapter 1 →', onclick: () => { location.href = s.currentStep && s.currentStep !== 'index.html' ? s.currentStep : 'tokens.html'; } }),
       el('span', { class: 'fig-caption', style: 'margin:0', text: 'Six short chapters, about an hour. Nothing is computed until you press play.' }),
@@ -88,7 +98,7 @@ function howToRead() {
     prose(`
       <p>The chapters follow the text through the model in the order the model works: words → numbers → meaning → attention → thinking → prediction → and finally the autocomplete built from it all.</p>
       <p>Every stage is a small <strong>player</strong>. Nothing is computed in front of you until you press play; then it happens one cell or one row at a time, with a line explaining that step. If you change an input, the stages after it simply wait to be played again. Two kinds of numbers appear throughout: <span class="tag stored">saved input</span> — the text and the weights, the only things stored — and <span class="tag derived">recomputed</span> — everything else, worked out from them.</p>
-      <p><strong>Lesson</strong> mode (the switch at the top right) keeps every table read-only and hides the extras; <strong>Lab</strong> mode lets you edit any weight, compare with the untrained model, export the model, and more.</p>`),
+      <p><strong>Lesson</strong> mode (the switch at the top right) keeps every table read-only and hides the extras; <strong>Lab</strong> mode lets you edit any weight, compare with the untrained model, export the model, and more. Everything the book remembers lives in this browser only; <strong>Start over</strong> (top right) wipes it all and returns to a clean state.</p>`),
   ]);
 }
 

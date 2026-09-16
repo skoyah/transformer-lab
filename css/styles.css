@@ -618,3 +618,9 @@ dfn.term:hover::after, dfn.term:focus::after { max-width: min(22rem, 85vw); }
 .quiz-a.miss { background: var(--warm); border-color: var(--warm); color: #fff; }
 @media (max-width: 760px) { .nav-tools .undo-group { display: inline-flex; } .nav-tools { margin-left: auto; } .nav-select { margin-left: 0; } }
 .moved-note { color: var(--warm); font-weight: 600; }
+.demo-line { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; font-family: var(--serif); font-size: 1.15rem; margin-top: .2rem; }
+.demo-ctx { color: var(--muted); }
+.demo-arrow { color: var(--accent); font-size: 1.2rem; }
+.demo-guess { background: var(--accent-soft); color: var(--accent); font-weight: 600; padding: .15rem .6rem; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+.demo-written { font-family: var(--serif); font-size: 1.05rem; margin: 0; line-height: 1.6; }
+.demo-gen { color: var(--warm); font-weight: 600; }

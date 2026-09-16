@@ -394,6 +394,16 @@ export function setAnimation(prefs) {
   commitQuiet(['animation']);
 }
 
+// Wipe everything the book stored in this browser and reload to the defaults.
+export function wipeAll() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    for (const k of Object.keys(localStorage)) if (k.startsWith('tl:') || k.startsWith('transformer-lab:')) localStorage.removeItem(k);
+    sessionStorage.clear();
+  } catch {}
+  location.href = location.pathname.replace(/[^/]*$/, '') + 'index.html';
+}
+
 export function setQuiz(page, qi, answer) {
   state.quiz = state.quiz || {};
   state.quiz[page] = { ...(state.quiz[page] || {}), [qi]: answer };

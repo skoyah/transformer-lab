@@ -4,7 +4,7 @@
 
 import { STAGE_BY_ID, STAGES, shapeOf } from './transformer.js';
 import { GLOSSARY } from './glossary.js';
-import { getExperiment, onChange, setCurrentStep, undo, redo, canUndo, canRedo, setCoalescing, setView, LENS_SIZES, setMode, isLab } from './state.js';
+import { getExperiment, onChange, setCurrentStep, undo, redo, canUndo, canRedo, setCoalescing, setView, LENS_SIZES, setMode, isLab, wipeAll } from './state.js';
 
 export const CHAPTERS = [
   { href: 'index.html', n: 0, label: 'Start here', title: 'A transformer you can read',
@@ -249,6 +249,9 @@ export function initPage(active) {
         CHAPTERS.map((c) => el('option', { value: c.href, text: `${c.n} · ${c.label}`, selected: c.href === active }))),
       el('span', { class: 'nav-sentence', id: 'nav-sentence' }),
       el('span', { class: 'nav-tools' }, [
+        el('button', { class: 'ghost', title: 'Wipe everything this book saved in your browser and start from a clean state', text: 'Start over', onclick: () => {
+          if (confirm('Start over?\n\nThis wipes everything the book saved in this browser: your text, the weights and training, played stages, quiz answers, bookmarks and preferences. It reloads with the default sentence.')) wipeAll();
+        } }),
         undoButtons(true),
         el('span', { class: 'mode-switch', title: 'Lesson: follow the class. Lab: every table editable, all the extras.' }, [
           el('button', { dataset: { mode: 'lesson' }, text: 'Lesson', onclick: () => setMode('lesson') }),
