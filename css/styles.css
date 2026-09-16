@@ -471,12 +471,13 @@ table.matrix td.flash { animation: cellflash 1s ease-out; }
 .gauge-track { flex: 0 0 110px; height: 7px; background: var(--bg); border-radius: 4px; overflow: hidden; }
 .gauge-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--warm)); border-radius: 4px; transition: width .5s; }
 
-/* ---------- nav progress pill ---------- */
-.progress-pill { display: inline-flex; align-items: center; gap: .5rem; text-decoration: none; color: var(--muted); font: 12.5px/1 var(--sans); margin-left: .4rem; padding: .3rem .6rem; border-radius: 999px; }
-.progress-pill:hover { background: var(--bg); color: var(--ink); }
-.progress-pill .bar { width: 72px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.progress-pill .fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .4s; }
-@media (max-width: 900px) { .progress-pill .txt { display: none; } .progress-pill { margin-left: .2rem; padding: .3rem .3rem; } }
+/* ---------- nav chapter progress ---------- */
+.chapter-progress { display: inline-flex; gap: 5px; align-items: center; margin-left: .5rem; }
+.cp { position: relative; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--muted); overflow: hidden; box-sizing: border-box; display: inline-block; background: var(--paper); }
+.cp .fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: var(--accent); transition: height .3s; }
+.cp.all { border-color: var(--accent); }
+.cp.quiz { box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--accent); }
+.cp:hover { transform: scale(1.3); }
 
 /* ---------- flow diagram ---------- */
 .flow-wrap { overflow-x: auto; }
@@ -582,7 +583,7 @@ dfn.term:hover::after, dfn.term:focus::after {
   background: var(--ink); color: var(--paper); font: 13px/1.45 var(--sans); padding: .5rem .7rem; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
 }
 .chapter-goal { margin: .8rem 0 0; font-family: var(--sans); font-size: 14px; }
-.chapter-goal .bridge { color: var(--muted); margin: 0 0 .3rem; }
+.chapter-goal .bridge { color: var(--muted); }
 .chapter-goal .goal { margin: 0; padding: .55rem .8rem; background: var(--accent-soft); border-radius: 8px; color: var(--ink-soft); }
 .chapter-goal .goal strong { color: var(--accent); }
 .callout.recap { background: var(--paper); border-color: var(--line-strong); }
@@ -607,3 +608,12 @@ details.map .lesson { margin-top: 1rem; }
 .quiz-feedback { font: 14px/1.5 var(--sans); margin: .4rem 0 0; }
 .quiz-feedback.ok { color: var(--accent); }
 .quiz-feedback.miss { color: var(--warm); }
+
+/* ---------- pointer, tips, tooltip placement, contrast ---------- */
+.play-pointer { font: 600 13px/1.3 var(--sans); color: var(--accent); animation: nudge 1.2s ease-in-out infinite; white-space: nowrap; }
+@keyframes nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+.chapter-controls .tip { color: var(--muted); }
+dfn.term:hover::after, dfn.term:focus::after { max-width: min(22rem, 85vw); }
+@media (max-width: 600px) { dfn.term:hover::after, dfn.term:focus::after { position: fixed; left: 1rem; right: 1rem; bottom: 1rem; top: auto; width: auto; max-width: none; } }
+.quiz-a.miss { background: var(--warm); border-color: var(--warm); color: #fff; }
+@media (max-width: 760px) { .nav-tools .undo-group { display: inline-flex; } .nav-tools { margin-left: auto; } .nav-select { margin-left: 0; } }

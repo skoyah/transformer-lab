@@ -398,6 +398,7 @@ function toolbar(id) {
     p.playing
       ? btn('pause', 'Pause', () => pause(id))
       : el('button', { class: 'pbtn play-main', title: atEnd ? 'Play again' : 'Play', html: `${icon('play')}<span>${atEnd ? 'Play again' : p.step ? 'Continue' : 'Play'}</span>`, onclick: () => play(id) }),
+    !p.playing && p.step === 0 && !seenPlay() && !pointerShown && (pointerShown = true) ? el('span', { class: 'play-pointer', text: '← Nothing happens until you press play — try it' }) : null,
     btn('next', 'Next step', () => { pause(id); setStep(id, p.step + 1); }, atEnd),
     lab ? btn('end', 'Skip to the end', () => { pause(id); setStep(id, p.total); }, atEnd) : null,
     el('span', { class: 'counter', text: `${p.step} / ${p.total}` }),
@@ -428,9 +429,14 @@ function updateChapterCount() {
   node.textContent = `${ids.filter((id) => s.progress[id] === 'done').length} of ${ids.length} stages played`;
 }
 
+let pointerShown = false; // one "press play" pointer per page load, until the reader has ever pressed play
+const seenPlay = () => { try { return localStorage.getItem('tl:seenPlay') === '1'; } catch { return false; } };
+
 export function play(id) {
   const p = players.get(id);
   if (!p) return;
+  try { localStorage.setItem('tl:seenPlay', '1'); } catch {}
+  document.querySelectorAll('.play-pointer').forEach((n) => n.remove());
   if (p.step >= p.total) p.step = 0;
   p.playing = true;
   refresh(id);
@@ -498,6 +504,7 @@ export function finishSequence(ids) {
 
 // Chapter-level controls placed at the top of a page.
 export function chapterControls(ids) {
+  pointerShown = false;
   const s = getExperiment();
   const done = ids.filter((id) => s.progress[id] === 'done').length;
   const speed = s.animation.speed || 'normal';
@@ -508,6 +515,7 @@ export function chapterControls(ids) {
     el('label', { class: 'inline', style: 'gap:.35rem' }, ['Speed', el('select', { 'aria-label': 'Playback speed', onchange: (e) => { setAnimation({ speed: e.target.value }); for (const id of players.keys()) refresh(id); } },
       Object.keys(SPEEDS).map((k) => el('option', { value: k, text: k, selected: k === speed })))]),
     el('span', { class: 'fig-caption', style: 'margin:0', dataset: { count: ids.join(',') }, text: `${done} of ${ids.length} stages played` }),
+    el('span', { class: 'fig-caption tip', style: 'margin:0; flex-basis:100%', text: 'Tip: hover or tap any computed number to see how it was made.' + (isLab() ? ' Keys: Space plays, ← → step, Home/End jump; in tables ↑/↓ nudge a weight.' : '') }),
   ]);
 }
 

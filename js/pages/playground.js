@@ -235,7 +235,7 @@ function render() {
       <li>Train 25 steps and compare the two columns. The fresh model spreads its bets thinly; yours should reproduce your text almost word for word — it has memorised it, which is all a tiny model trained on one sentence can do.</li>
       <li>Start the prompt with a word from the <em>middle</em> of your text. Does your model continue correctly from there?</li>
       <li>Turn creativity up to 1.5 and hit “different draw” a few times. Same weights, different words — that's sampling, and it's why a chatbot with the temperature above zero rarely answers the same way twice.</li>
-      <li>Change the training text on the Start page to two or three sentences that share words, train 50 steps, and see if it learns to switch between them. Then prompt it with a fourth sentence it never saw: surprise on unseen text is what <strong>generalising</strong> means, and this model, trained on a few sentences, does it badly — which is exactly why real models need trillions of pieces.</li>
+      <li>Change the training text on the Start page to two or three sentences that share words, train 50 steps, and see if it learns to switch between them. Then test it on a fourth sentence it never saw (the box below): <strong>low</strong> surprise on text it never saw is what <strong>generalising</strong> means, and this model, trained on a few sentences, does it badly — which is exactly why real models need trillions of pieces.</li>
     </ul>`),
   ]);
 
@@ -256,9 +256,11 @@ function render() {
         el('div', {}, [el('b', { text: heldFresh == null ? '–' : fmt(heldFresh, 2) }), el('span', { text: 'unseen text, fresh model' })]),
         el('div', {}, [el('b', { text: fmt(Math.log(s.vocab.length), 2) }), el('span', { text: `guessing evenly among ${s.vocab.length}` })]),
       ]),
-      el('p', { class: 'fig-caption', text: heldLoss == null ? 'Type a few words.' : (heldLoss > lossNow + 1
-        ? `Much more surprised by the unseen text than by its own: the model has memorised ${s.sentence.split(/\s+/).length} words, not learned English. That gap is called overfitting, and it is what you get from training a few hundred weights on one sentence.`
-        : `Similar surprise on seen and unseen text — it is generalising a little. Pieces it never saw in training still have random rows, so it can only do well on words it knows.`) }),
+      el('p', { class: 'fig-caption', text: heldLoss == null ? 'Type a few words.'
+        : lossNow > Math.log(s.vocab.length) - 0.5 ? 'The model has not learned its own text yet either — train it in Chapter 5, then come back.'
+        : heldLoss > lossNow + 1
+          ? `Much more surprised by the unseen text than by its own: the model has memorised ${s.sentence.split(/\s+/).length} words, not learned English. That gap is called overfitting, and it is what you get from training a few thousand weights on one sentence.`
+          : `Similar surprise on seen and unseen text — it is generalising a little. Pieces it never saw in training still have random rows, so it can only do well on pieces it knows.` }),
     ]),
     callout('key', `<p>Real models are trained on trillions of pieces and judged only on held-out text. The gap you see here is why: with little data, the cheapest way to lower surprise is to memorise; with a vast, varied corpus, the cheapest way is to learn the actual regularities of language — grammar, facts, style. More data, more weights and more blocks all serve that one goal.</p>`),
   ]);

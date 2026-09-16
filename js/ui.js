@@ -77,7 +77,9 @@ export function lesson(title, children, attrs = {}) {
 // term in running text, it gets a dotted underline and a plain definition.
 const linked = new Set();
 export function resetGlossary() { linked.clear(); }
-const TERM_RE = new RegExp('\\b(' + Object.keys(GLOSSARY).sort((a, b) => b.length - a.length).map((t) => t.replace(/[-]/g, '\\-')).join('|') + ')\\b', 'i');
+// Words with everyday meanings ("the value 0.5", "a key point") are not auto-linked.
+const AMBIGUOUS = new Set(['key', 'value', 'query', 'bias', 'loss', 'training']);
+const TERM_RE = new RegExp('\\b(' + Object.keys(GLOSSARY).filter((t) => !AMBIGUOUS.has(t)).sort((a, b) => b.length - a.length).map((t) => t.replace(/[-]/g, '\\-')).join('|') + ')\\b', 'i');
 export function prose(html) {
   const node = el('div', { class: 'prose', html });
   const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -94,7 +96,7 @@ export function prose(html) {
       linked.add(key);
       const after = rest.splitText(m.index);
       const tail = after.splitText(m[0].length);
-      const dfn = el('dfn', { class: 'term', tabindex: '0', 'data-tip': GLOSSARY[key], text: m[0] });
+      const dfn = el('dfn', { class: 'term', tabindex: '0', 'data-tip': GLOSSARY[key], 'aria-description': GLOSSARY[key], text: m[0] });
       after.replaceWith(dfn);
       rest = tail;
     }
@@ -171,8 +173,7 @@ export function chapterGoal(active) {
   const dek = document.querySelector('.chapter-head .dek');
   if (!dek || document.querySelector('.chapter-goal')) return;
   dek.after(el('div', { class: 'chapter-goal' }, [
-    ch.bridge ? el('p', { class: 'bridge', text: ch.bridge }) : null,
-    el('p', { class: 'goal' }, [el('strong', { text: 'After this chapter you can ' }), ch.goal]),
+    el('p', { class: 'goal' }, [ch.bridge ? el('span', { class: 'bridge', text: ch.bridge + ' ' }) : null, el('strong', { text: 'After this chapter you can ' }), ch.goal]),
   ]));
 }
 
@@ -250,8 +251,8 @@ export function initPage(active) {
       el('span', { class: 'nav-tools' }, [
         undoButtons(true),
         el('span', { class: 'mode-switch', title: 'Lesson: follow the class. Lab: every table editable, all the extras.' }, [
-          el('button', { dataset: { mode: 'lesson' }, text: 'Lesson', onclick: () => { setMode('lesson'); location.reload(); } }),
-          el('button', { dataset: { mode: 'lab' }, text: 'Lab', onclick: () => { setMode('lab'); location.reload(); } }),
+          el('button', { dataset: { mode: 'lesson' }, text: 'Lesson', onclick: () => setMode('lesson') }),
+          el('button', { dataset: { mode: 'lab' }, text: 'Lab', onclick: () => setMode('lab') }),
         ]),
       ]),
     );
@@ -276,6 +277,7 @@ export function initPage(active) {
     updateSentence();
     updateMinimap();
     updateUndoButtons();
+    if (event.changedKeys.includes('mode')) applyMode();
     if (event.quiet) return;
     if (event.affected.length || event.reset || event.external) showRecalculation(event);
   });
@@ -285,28 +287,42 @@ export function initPage(active) {
 export const labOnly = (node) => { if (node) node.classList.add('lab-only'); return node; };
 
 // ---------------------------------------------------------------------------
-// Progress pill in the nav: "n of 21 stages played" with a thin bar. Links to
-// the machine diagram on the Start page.
+// Chapter progress in the nav: one circle per chapter — empty, half (some
+// stages played), full (all played), ringed when that chapter's quiz is done.
 // ---------------------------------------------------------------------------
+import { QUIZZES } from './quiz-data.js';
+
+function chapterProgress(ch) {
+  const s = getExperiment();
+  const stages = STAGES.filter((st) => st.page === ch.href);
+  const played = stages.filter((st) => s.progress[st.id] === 'done').length;
+  const qs = QUIZZES[ch.href] || [];
+  const answers = (s.quiz || {})[ch.href] || {};
+  const right = qs.filter((q, i) => answers[i] === q.ok).length;
+  return { stages: stages.length, played, quiz: qs.length, right };
+}
 
 function mountMinimap() {
   const header = document.getElementById('nav');
   if (!header) return;
-  const pill = el('a', { class: 'progress-pill', href: 'index.html#machine', title: 'Stages you have played since their inputs last changed. Click for the full map.' }, [
-    el('span', { class: 'bar' }, el('span', { class: 'fill' })),
-    el('span', { class: 'txt' }),
-  ]);
-  header.insertBefore(pill, header.querySelector('.nav-sentence'));
+  const wrap = el('span', { class: 'chapter-progress', role: 'group', 'aria-label': 'Progress by chapter' },
+    CHAPTERS.filter((c) => c.n > 0).map((c) => el('a', { class: 'cp', href: c.href, dataset: { chapter: c.href } }, [el('span', { class: 'fill' })])));
+  header.insertBefore(wrap, header.querySelector('.nav-sentence'));
   updateMinimap();
 }
 
 function updateMinimap() {
-  const pill = document.querySelector('.progress-pill');
-  if (!pill) return;
-  const progress = getExperiment().progress || {};
-  const done = STAGES.filter((st) => progress[st.id] === 'done').length;
-  pill.querySelector('.fill').style.width = `${(done / STAGES.length) * 100}%`;
-  pill.querySelector('.txt').textContent = `${done} of ${STAGES.length} stages played`;
+  document.querySelectorAll('.chapter-progress .cp').forEach((a) => {
+    const ch = CHAPTERS.find((c) => c.href === a.dataset.chapter);
+    const pr = chapterProgress(ch);
+    const frac = pr.stages ? pr.played / pr.stages : 0;
+    a.classList.toggle('some', frac > 0 && frac < 1);
+    a.classList.toggle('all', pr.stages > 0 && frac >= 1);
+    a.classList.toggle('quiz', pr.quiz > 0 && pr.right === pr.quiz);
+    a.title = `Chapter ${ch.n} · ${ch.label}: ${pr.played} of ${pr.stages} stages played${pr.quiz ? `, quiz ${pr.right}/${pr.quiz}` : ''}`;
+    a.setAttribute('aria-label', a.title);
+    a.querySelector('.fill').style.height = `${Math.round(frac * 100)}%`;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -597,8 +613,9 @@ export function bindRender(renderPage, { quietKeys = [] } = {}) {
   const render = () => { resetGlossary(); renderPage(); };
   render();
   let pending = false;
+  const always = ['mode', ...quietKeys]; // a mode switch re-renders every page in place
   onChange((event) => {
-    if (event.quiet && !event.changedKeys.some((k) => quietKeys.includes(k))) return;
+    if (event.quiet && !event.changedKeys.some((k) => always.includes(k))) return;
     if (pending) return;
     pending = true;
     setTimeout(() => { pending = false; withFocus(render); }, 0);

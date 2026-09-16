@@ -5,5 +5,8 @@
   "scripts": {
     "start": "python3 -m http.server 8000",
     "test": "node --test test/*.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
   }
 }

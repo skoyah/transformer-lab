@@ -1,4 +1,4 @@
-import { getExperiment, getDerived, setWeightCell, setWeights, untrainedExperiment, usedIds } from '../state.js';
+import { getExperiment, getDerived, setWeightCell, setWeights, untrainedExperiment, usedIds, isLab } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, recap } from '../ui.js';
 import { checkYourself } from '../quiz.js';
 import { player, chapterControls } from '../player.js';
@@ -30,7 +30,7 @@ function render() {
         editable: true, rows: usedIds(), cornerLabel: 'id', onEdit: (r, c, v) => setWeightCell('embedding', r, c, v),
         compare: fresh ? fresh.weights.embedding : null,
       }),
-      el('p', { class: 'fig-caption', text: `One row per piece in the dictionary — ${s.vocab.length} rows in all; only the ${usedIds().length} your text uses are shown. Blue is negative, orange positive; stronger colour, bigger number. Click any number to change it — it is saved, and the stages after it go back to waiting for play. Keyboard: ↑/↓ nudge by 0.1 (Shift ±1, Alt ±0.01), ←/→ move between cells, Enter saves and moves down, Esc reverts.` }),
+      el('p', { class: 'fig-caption', text: `One row per piece in the dictionary — ${s.vocab.length} rows in all; only the ${usedIds().length} your text uses are shown. Blue is negative, orange positive; stronger colour, bigger number.${isLab() ? ' Click any number to change it — it is saved, and the stages after it go back to waiting for play. Keyboard: ↑/↓ nudge by 0.1 (Shift ±1, Alt ±0.01), ←/→ move between cells, Enter saves and moves down, Esc reverts; drag sideways to scrub.' : ' Switch to Lab mode to edit them.'}` }),
     ]),
   ]);
 
@@ -90,7 +90,7 @@ function render() {
     underHood('X[i] = E[ id[i] ] + P[i]', `<p>E is <code>vocab × d</code>, P is <code>positions × d</code>, X is <code>tokens × d</code>. Real models often learn P too, or use cleverer position tricks, but “add a position pattern” is the core idea.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), location, lookup, positions, x, recap([
+  content.replaceChildren(location, chapterControls(STAGES_HERE), lookup, positions, x, recap([
     `Each ticket number selects a row of ${dimCount} numbers from the embedding table E — the piece's learned “location”.`,
     'A position pattern P is added so two copies of the same piece are not identical.',
     'The result, X, is the input to the transformer block. From here on nothing is stored; everything is recomputed.',
