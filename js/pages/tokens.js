@@ -1,7 +1,7 @@
 import { getExperiment, getDerived, setSentence, sentenceProblem, usedIds } from '../state.js';
 import { bpeFor, tokenize, tokenizerOf, tokenizeWords, tokenSpans, WORD_START, BPE_PLAYER_STEPS } from '../transformer.js';
 import { CORPUS } from '../corpus.js';
-import { initPage, bindRender, el, esc, lesson, prose, callout, underHood, matrixTable, chapterNav, caption, windowOf, sliceRows, lensBar, pieceChips } from '../ui.js';
+import { initPage, bindRender, el, esc, lesson, prose, callout, underHood, matrixTable, chapterNav, caption, windowOf, sliceRows, lensBar, pieceChips, recap } from '../ui.js';
 import { player, chapterControls } from '../player.js';
 import { tokenizeScene, idScene, bpeScene } from '../scenes.js';
 
@@ -104,7 +104,11 @@ function render() {
       `<p>Byte-pair encoding: Sennrich, Haddow &amp; Birch (2016); the byte-level variant with a leading-space convention is GPT-2's (Radford et al. 2019), which also lays the vocabulary out this way: bytes first, then merges in the order they were learned. Other subword families exist — WordPiece (BERT) and Unigram (T5) — and solve the same problem. Punctuation gets a leading space byte too, so “mat.” and “mat .” tokenise the same here; GPT-2's pre-tokenizer keeps that distinction.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), intro, pieces, numbering, chapterNav('tokens.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), intro, pieces, numbering, recap([
+    'Text is cut into <strong>pieces</strong> (tokens) by a fixed recipe learned from a corpus: common words stay whole, rare ones fragment, nothing is ever unknown.',
+    'Every piece the tokenizer can make already has a <strong>ticket number</strong> in a fixed dictionary; your text is now a list of those numbers.',
+    'The numbers carry no meaning yet — that is the next chapter.',
+  ]), chapterNav('tokens.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

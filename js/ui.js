@@ -3,16 +3,30 @@
 // worked examples and the "what just changed" panel. No maths lives here.
 
 import { STAGE_BY_ID, STAGES, shapeOf } from './transformer.js';
+import { GLOSSARY } from './glossary.js';
 import { getExperiment, onChange, setCurrentStep, undo, redo, canUndo, canRedo, setCoalescing, setView, LENS_SIZES, setMode, isLab } from './state.js';
 
 export const CHAPTERS = [
-  { href: 'index.html', n: 0, label: 'Start here', title: 'A transformer you can read' },
-  { href: 'tokens.html', n: 1, label: 'Tokens', title: 'Words become numbers' },
-  { href: 'embeddings.html', n: 2, label: 'Embeddings', title: 'Numbers become meaning' },
-  { href: 'attention.html', n: 3, label: 'Attention', title: 'Words look at each other' },
-  { href: 'ffn.html', n: 4, label: 'Thinking', title: 'Each word thinks on its own' },
-  { href: 'output.html', n: 5, label: 'Predicting', title: 'Guessing the next word' },
-  { href: 'playground.html', n: 6, label: 'Put it to work', title: 'So what is this for?' },
+  { href: 'index.html', n: 0, label: 'Start here', title: 'A transformer you can read',
+    goal: 'say what the book builds (a tiny next-word predictor), what a weight is, and how to play a stage.' },
+  { href: 'tokens.html', n: 1, label: 'Tokens', title: 'Words become numbers',
+    bridge: 'Where we are: you have seen the model guess. Now, how does text get into it at all?',
+    goal: 'cut any sentence into tokens, explain why pieces rather than words or letters, and look a piece up to get its number.' },
+  { href: 'embeddings.html', n: 2, label: 'Embeddings', title: 'Numbers become meaning',
+    bridge: 'Where we are: your text is now a list of ticket numbers. Next, the numbers get meaning.',
+    goal: 'explain why a ticket number becomes a row of numbers, why position is added, and what the table X is.' },
+  { href: 'attention.html', n: 3, label: 'Attention', title: 'Words look at each other',
+    bridge: 'Where we are: every token has its own row of numbers, but knows nothing about its neighbours. Next, they talk.',
+    goal: 'walk one token through question → badge → score → share → blended note, and read an attention table.' },
+  { href: 'ffn.html', n: 4, label: 'Thinking', title: 'Each word thinks on its own',
+    bridge: 'Where we are: each token has gathered what it needed from the others. Next, each one processes it alone.',
+    goal: 'explain “add back, normalise, think alone, add back, normalise”, and why a token keeps its original row.' },
+  { href: 'output.html', n: 5, label: 'Predicting', title: 'Guessing the next word',
+    bridge: 'Where we are: the block is done; every token has a final row of numbers. Next, turning that into a bet — and teaching the model to bet better.',
+    goal: 'read a probability row, compute the surprise for one position, and say what one training step does.' },
+  { href: 'playground.html', n: 6, label: 'Put it to work', title: 'So what is this for?',
+    bridge: 'Where we are: you have a trained model. Now use it the way a phone keyboard or a chatbot would.',
+    goal: 'run the model as autocomplete, compare fresh and trained, and explain what temperature does.' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -59,8 +73,33 @@ export function lesson(title, children, attrs = {}) {
   return el('section', { class: 'lesson', ...attrs }, [title ? el('h2', { text: title }) : null, ...[].concat(children)]);
 }
 
+// Prose with glossary tooltips: the first time a page mentions a glossary
+// term in running text, it gets a dotted underline and a plain definition.
+const linked = new Set();
+export function resetGlossary() { linked.clear(); }
+const TERM_RE = new RegExp('\\b(' + Object.keys(GLOSSARY).sort((a, b) => b.length - a.length).map((t) => t.replace(/[-]/g, '\\-')).join('|') + ')\\b', 'i');
 export function prose(html) {
-  return el('div', { class: 'prose', html });
+  const node = el('div', { class: 'prose', html });
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  const texts = [];
+  let t;
+  while ((t = walker.nextNode())) if (!t.parentElement.closest('dfn, code, a, strong')) texts.push(t);
+  for (const text of texts) {
+    let rest = text;
+    for (let guard = 0; guard < 6; guard++) {
+      const m = TERM_RE.exec(rest.nodeValue);
+      if (!m) break;
+      const key = m[1].toLowerCase();
+      if (linked.has(key) || linked.has(key.replace(/s$/, '')) || linked.has(key + 's')) { rest = rest.splitText(m.index + m[0].length); continue; }
+      linked.add(key);
+      const after = rest.splitText(m.index);
+      const tail = after.splitText(m[0].length);
+      const dfn = el('dfn', { class: 'term', tabindex: '0', 'data-tip': GLOSSARY[key], text: m[0] });
+      after.replaceWith(dfn);
+      rest = tail;
+    }
+  }
+  return node;
 }
 
 const CALLOUT_LABELS = { idea: 'Analogy', try: 'Try it', key: 'Key idea' };
@@ -120,6 +159,25 @@ export function sumExample(lhs, parts, { decimals = 2 } = {}) {
     `<span class="lhs">${esc(lhs)}</span><span class="eq">=</span>${terms.join('<span class="eq">+</span>')}<span class="eq">=</span><span class="result">${fmt(result, decimals)}</span>` });
 }
 
+// Learning goal shown under the chapter dek, and a recap box for the end.
+export function chapterGoal(active) {
+  const ch = CHAPTERS.find((c) => c.href === active);
+  if (!ch || !ch.goal) return;
+  const dek = document.querySelector('.chapter-head .dek');
+  if (!dek || document.querySelector('.chapter-goal')) return;
+  dek.after(el('div', { class: 'chapter-goal' }, [
+    ch.bridge ? el('p', { class: 'bridge', text: ch.bridge }) : null,
+    el('p', { class: 'goal' }, [el('strong', { text: 'After this chapter you can ' }), ch.goal]),
+  ]));
+}
+
+export function recap(items) {
+  return el('aside', { class: 'callout recap' }, [
+    el('div', { class: 'label', text: 'What you saw' }),
+    el('ul', {}, items.map((t) => el('li', { html: t }))),
+  ]);
+}
+
 export function chapterNav(active) {
   const i = CHAPTERS.findIndex((c) => c.href === active);
   const prev = CHAPTERS[i - 1];
@@ -171,6 +229,8 @@ export function undoButtons(compact = false) {
 
 export function initPage(active) {
   setCurrentStep(active);
+  resetGlossary();
+  chapterGoal(active);
   const header = document.getElementById('nav');
   if (header) {
     header.replaceChildren(
@@ -528,7 +588,8 @@ export function withFocus(fn) {
   if (next) next.focus();
 }
 
-export function bindRender(render, { quietKeys = [] } = {}) {
+export function bindRender(renderPage, { quietKeys = [] } = {}) {
+  const render = () => { resetGlossary(); renderPage(); };
   render();
   let pending = false;
   onChange((event) => {

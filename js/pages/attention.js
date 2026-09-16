@@ -1,6 +1,6 @@
 import { getExperiment, getDerived, setWeightCell, setWeights, setCausal, untrainedExperiment, isLab } from '../state.js';
 import { forward } from '../transformer.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, sliceBoth, sliceCols, lensBar, labOnly } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, sliceBoth, sliceCols, lensBar, labOnly, recap } from '../ui.js';
 import { SPEEDS } from '../player.js';
 import { player, chapterControls } from '../player.js';
 import { matmulScene, rowScene, transposeScene, vec, cellRef } from '../scenes.js';
@@ -160,7 +160,11 @@ function render() {
     callout('key', `<p><strong>Why the trained heatmap stays flat here.</strong> On a single text the model can memorise the answer without choosing where to look: every position's past is unique, so “take the average of what came before, then think” is enough. Attention earns its keep when the same pieces in a different order must give a different answer — many different texts, not one. ${isLab() ? 'The presets above show what a sharp pattern looks like; a' : 'A'} model trained on real text learns sharp patterns on its own.</p>`, 'Honest note'),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), why, lenses, scoring, tidy, softmax, collect, chapterNav('attention.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), why, lenses, scoring, tidy, softmax, collect, recap([
+    'Each token asks a <strong>question</strong> (Q), wears a <strong>badge</strong> (K) and carries a <strong>note</strong> (V) — three views of its own row.',
+    'Every question is scored against every badge; softmax turns the scores into <strong>shares</strong> that add up to 100%.',
+    'Each token’s new row is the notes of all tokens, blended by its shares. On one training text the shares stay nearly even — attention shines on varied text.',
+  ]), chapterNav('attention.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

@@ -1,5 +1,5 @@
 import { getExperiment, getDerived, setWeightCell, setWeights, untrainedExperiment, usedIds } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, recap } from '../ui.js';
 import { player, chapterControls } from '../player.js';
 import { lookupScene, rowScene, vec } from '../scenes.js';
 
@@ -89,7 +89,11 @@ function render() {
     underHood('X[i] = E[ id[i] ] + P[i]', `<p>E is <code>vocab × d</code>, P is <code>positions × d</code>, X is <code>tokens × d</code>. Real models often learn P too, or use cleverer position tricks, but “add a position pattern” is the core idea.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), location, lookup, positions, x, chapterNav('embeddings.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), location, lookup, positions, x, recap([
+    `Each ticket number selects a row of ${dimCount} numbers from the embedding table E — the piece's learned “location”.`,
+    'A position pattern P is added so two copies of the same piece are not identical.',
+    'The result, X, is the input to the transformer block. From here on nothing is stored; everything is recomputed.',
+  ]), chapterNav('embeddings.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

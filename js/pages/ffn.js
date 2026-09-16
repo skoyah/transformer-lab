@@ -1,5 +1,5 @@
 import { getExperiment, getDerived, setWeightCell, setWeights } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly, recap } from '../ui.js';
 import { player, chapterControls, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, vec } from '../scenes.js';
 
@@ -145,7 +145,11 @@ function render() {
     callout('key', `<p>A transformer block is two moves, each wrapped in “add to the original and normalise”: <em>attention</em> (words exchange information) and <em>feed-forward</em> (each word processes it alone).</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), residual, norm, think, again, chapterNav('ffn.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), residual, norm, think, again, recap([
+    '<strong>Add back</strong>: the attention result is added onto the token’s own row, so nothing is forgotten.',
+    '<strong>Normalise</strong>: each row is rescaled to average 0, spread 1, so numbers stay in a comfortable range.',
+    '<strong>Think alone</strong>: expand, keep the positives (ReLU), squeeze back — then add back and normalise once more. That is one whole transformer block.',
+  ]), chapterNav('ffn.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

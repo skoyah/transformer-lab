@@ -1,10 +1,10 @@
-import { STAGES, shapeOf } from '../transformer.js';
+import { STAGES, shapeOf, topK, generate, crossEntropy } from '../transformer.js';
 import {
   getExperiment, getDerived, setSentence, sentenceProblem, setModelConfig, setCausal, setLearningRate,
   setAnimation, resetExperiment, saveSnapshot, loadSnapshot, deleteSnapshot, exportSnapshot,
   importSnapshot, DIM_OPTIONS, HIDDEN_OPTIONS, MAX_TOKENS,
 } from '../state.js';
-import { initPage, bindRender, el, fmt, pct, esc, lesson, prose, callout, flowDiagram, CHAPTERS } from '../ui.js';
+import { initPage, bindRender, el, fmt, pct, esc, lesson, prose, callout, flowDiagram, CHAPTERS, labOnly } from '../ui.js';
 import { onChange, shareUrl, decodeShared, loadShared, asNumpy } from '../state.js';
 
 const arrivedFrom = getExperiment().currentStep;
@@ -27,7 +27,7 @@ function heroPanel() {
   const s = getExperiment();
   const d = getDerived();
   const last = s.tokenIds.length - 1;
-  const pred = d.prediction[last];
+  const steps = s.trainingHistory.length;
   const sentence = el('textarea', { text: s.sentence, 'aria-label': 'Training text' });
   const problem = el('p', { class: 'fig-caption problem', hidden: !s.notice, text: s.notice || '' });
   const apply = () => {
@@ -40,21 +40,42 @@ function heroPanel() {
   sentence.addEventListener('change', apply);
   sentence.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); apply(); } });
 
-  return el('div', { class: 'hero' }, [
-    el('div', { class: 'card' }, [
-      el('h3', { style: 'margin-top:0', text: 'Your text' }),
-      prose(`<p>Everything in this book is computed from this text. A sentence or two is the easiest to follow — the model is small and you'll want to read every number — but up to ${MAX_TOKENS} tokens work: the tables then show a window of positions you can slide. Press Enter to apply.</p>`),
-      sentence,
-      problem,
-      el('p', { class: 'fig-caption', text: `${d.tokens.length} tokens (max ${MAX_TOKENS}) · ${new Set(s.tokenIds).size} of the dictionary's ${s.vocab.length} pieces used · ${s.config.dim} numbers per piece` }),
-    ]),
-    el('div', { class: 'card' }, [
-      el('h3', { style: 'margin-top:0', text: 'Right now the model thinks…' }),
-      prose(`<p>…that after <strong>“${esc(d.tokens[last])}”</strong> the next word is <strong>“${esc(pred.token)}”</strong> (${pct(pred.prob)} sure).${s.trainingHistory.length ? '' : ' It has never been trained, so this is no better than a random guess — by Chapter 5 you will fix that.'}</p>`),
-      el('p', { style: 'margin:0' }, [
-        el('button', { class: 'primary', text: arrivedFrom && arrivedFrom !== 'index.html' ? 'Continue reading →' : 'Start with Chapter 1 →',
-          onclick: () => { location.href = arrivedFrom && arrivedFrom !== 'index.html' ? arrivedFrom : 'tokens.html'; } }),
+  // Live keyboard demo: the model's top three bets after the last token, and a few words written greedily.
+  const row = d.probs[last];
+  const top = topK(row, 3);
+  const written = generate(s, s.tokenIds, { steps: 4, temperature: 0 });
+  const loss = crossEntropy(d.probs, d.tokenIds);
+  const V = s.vocab.length;
+  const eff = Math.min(V, Math.exp(loss));
+
+  return el('div', { class: 'stack' }, [
+    el('div', { class: 'hero' }, [
+      el('div', { class: 'card' }, [
+        el('h3', { style: 'margin-top:0', text: 'Your text' }),
+        prose(`<p>Everything in this book is computed from this text. A sentence is easiest to follow; up to ${MAX_TOKENS} tokens work. Press Enter to apply.</p>`),
+        sentence,
+        problem,
+        el('p', { class: 'fig-caption', text: `${d.tokens.length} tokens · ${s.config.dim} numbers per token · ${steps ? `trained ${steps} step${steps === 1 ? '' : 's'}` : 'not trained yet'}` }),
       ]),
+      el('div', { class: 'card demo' }, [
+        el('h3', { style: 'margin-top:0', text: 'What the model does' }),
+        el('p', { class: 'fig-caption', style: 'margin:0 0 .5rem', text: `After “${d.tokens[last]}”, its three best bets for the next piece:` }),
+        el('div', { class: 'keyboard' }, top.map((t, i) => el('span', { class: `key ${i === 0 ? 'best' : ''}` }, [s.vocab[t.id], el('small', { text: pct(t.p) })]))),
+        el('p', { class: 'fig-caption', style: 'margin:.7rem 0 .3rem', text: 'Left to write on its own, it continues:' }),
+        el('div', { class: 'chips' }, [
+          ...s.tokenIds.slice(Math.max(0, last - 3), last + 1).map((id) => el('span', { class: 'chip prompt', text: s.vocab[id] })),
+          ...written.map((g) => el('span', { class: 'chip gen', style: `--conf:${g.prob.toFixed(2)}` }, [g.token, el('small', { text: pct(g.prob) })])),
+        ]),
+        el('p', { class: 'fig-caption', style: 'margin:.7rem 0 0', text: steps
+          ? `That is the whole game: bet on the next piece. Its surprise on your text is ${fmt(loss, 2)} — it is hesitating between about ${eff < 10 ? eff.toFixed(1) : Math.round(eff)} of the ${V} pieces it knows.`
+          : `That is the whole game: bet on the next piece. Untrained, it is guessing — hesitating between about ${Math.round(eff)} of the ${V} pieces it knows. By Chapter 5 you will have trained it; by Chapter 6 it runs as a phone-keyboard autocomplete.` }),
+      ]),
+    ]),
+    prose(`<p>A phone keyboard does this when it suggests your next word; a chatbot does it in a loop, one piece at a time. The machine behind it is a <strong>transformer</strong>, and this book walks through a real, tiny one: every number is on screen, and you press play to watch each step happen.</p>
+      <p>The model has only one kind of memory: its <strong>weights</strong> — a few hundred numbers, in a handful of tables, that training is allowed to change. Everything else you will see is worked out from them and from your text. A chatbot's weights number in the billions; the tables are just bigger.</p>`),
+    el('div', { class: 'start-row' }, [
+      el('button', { class: 'primary big', text: s.currentStep && s.currentStep !== 'index.html' ? 'Continue reading →' : 'Start Chapter 1 →', onclick: () => { location.href = s.currentStep && s.currentStep !== 'index.html' ? s.currentStep : 'tokens.html'; } }),
+      el('span', { class: 'fig-caption', style: 'margin:0', text: 'Six short chapters, about an hour. Nothing is computed until you press play.' }),
     ]),
   ]);
 }
@@ -62,14 +83,9 @@ function heroPanel() {
 function howToRead() {
   return lesson('How to read this book', [
     prose(`
-      <p>Six short chapters follow the text through the model, in the order the model itself works: words → numbers → meaning → attention → thinking → prediction → and finally a working autocomplete built from it all.</p>
-      <p>Every stage is a small player. Nothing is computed in front of you until you press <strong>play</strong>; then it happens one cell or one row at a time, with a line explaining that step. Step back, scrub, or skip to the end whenever you like. If you change an input, the stages after it simply wait to be played again.</p>
-      <p>Two kinds of numbers appear throughout:</p>
-      <ul>
-        <li><span class="tag stored">saved input</span> — a value you can edit. There are only a handful: the text, a random seed, and the weight tables. These are the model's memory, and they are saved in your browser.</li>
-        <li><span class="tag derived">recomputed</span> — everything else. These are never stored; they are recalculated from the inputs whenever something upstream changes, like formulas in a spreadsheet.</li>
-      </ul>`),
-    callout('idea', `<p>Think of a spreadsheet. A few cells hold typed-in values; every other cell is a formula. Change one input and the dependent cells have to be recalculated. This model is exactly that — except here you turn the crank yourself: edit a weight, and the panel in the corner lists which stages are waiting for you to press play.</p>`),
+      <p>The chapters follow the text through the model in the order the model works: words → numbers → meaning → attention → thinking → prediction → and finally the autocomplete built from it all.</p>
+      <p>Every stage is a small <strong>player</strong>. Nothing is computed in front of you until you press play; then it happens one cell or one row at a time, with a line explaining that step. If you change an input, the stages after it simply wait to be played again. Two kinds of numbers appear throughout: <span class="tag stored">saved input</span> — the text and the weights, the only things stored — and <span class="tag derived">recomputed</span> — everything else, worked out from them.</p>
+      <p><strong>Lesson</strong> mode (the switch at the top right) keeps every table read-only and hides the extras; <strong>Lab</strong> mode lets you edit any weight, compare with the untrained model, export the model, and more.</p>`),
   ]);
 }
 
@@ -209,7 +225,11 @@ function snapshotsPanel() {
 }
 
 function render() {
-  content.replaceChildren(heroPanel(), howToRead(), machinePanel(), tocPanel(), settingsPanel(), snapshotsPanel());
+  const map = el('details', { class: 'map' }, [
+    el('summary', { text: 'The map: every stage of the machine, and where you are' }),
+    machinePanel(), tocPanel(),
+  ]);
+  content.replaceChildren(heroPanel(), howToRead(), map, labOnly(settingsPanel()), labOnly(snapshotsPanel()));
 }
 
 // Progress changes (this tab or another) only need the diagram and list refreshed.

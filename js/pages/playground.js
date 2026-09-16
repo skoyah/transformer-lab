@@ -1,6 +1,6 @@
 import { tokenize, forwardIds, generate, topK, lossOf, trainStep } from '../transformer.js';
 import { getExperiment, getDerived, untrainedExperiment, setPlayground, trainMany, tokenizeLike, MAX_PROMPT_TOKENS } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs, recap } from '../ui.js';
 import { player, groupControls } from '../player.js';
 import { worked } from '../scenes.js';
 
@@ -256,7 +256,11 @@ function render() {
     callout('key', `<p>Tokens → embeddings → attention → feed-forward → next-word bet, repeated. If you followed the numbers in this book, you understand the machine. The rest is engineering and scale.</p>`),
   ]);
 
-  content.replaceChildren(intro, demo, scale, chapterNav('playground.html'));
+  content.replaceChildren(intro, demo, scale, recap([
+    'A keyboard suggestion is one forward pass and a top-3; a chatbot is the same pass in a loop, one piece at a time.',
+    'Once trained, the weights are frozen: using the model teaches it nothing. <strong>Temperature</strong> adds randomness to the pick.',
+    'Trained on one sentence, this model memorises; trained on trillions of pieces, the same recipe learns grammar, facts and style — because that is the cheapest way to be less surprised.',
+  ]), chapterNav('playground.html'));
   if (active === prompt || active === tempInput || active === stepsInput) {
     active.focus({ preventScroll: true });
     if (sel) prompt.setSelectionRange(sel[0], sel[1]);

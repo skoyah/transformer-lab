@@ -1,6 +1,6 @@
 import { crossEntropy, lossOf, cloneWeights } from '../transformer.js';
 import { getExperiment, getDerived, setWeightCell, setWeights, setLearningRate, setCausal, train, trainStepAsync, trainMany, untrainedExperiment, usedIds } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly, recap } from '../ui.js';
 import { player, chapterControls, pauseAll, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, predictionScene, vec } from '../scenes.js';
 
@@ -198,7 +198,11 @@ function render() {
     underHood('loss = mean over t of −log P[t][ id[t+1] ]        w ← w − lr · ∂loss/∂w', `<p>Gradients come from backpropagation (js/transformer.js, <code>gradients()</code>): softmax + cross-entropy → output projection → layer norm → feed-forward → layer norm → attention (softmax, scaling, Q/K/V) → embeddings and positions, each block the exact reverse of its forward line. The test suite checks it against central finite differences, (loss(w+ε) − loss(w−ε)) / 2ε, to 1e-6.</p>`),
   ]);
 
-  content.replaceChildren(chapterControls(STAGES_HERE), scoring, betting, learning, chapterNav('output.html'));
+  content.replaceChildren(chapterControls(STAGES_HERE), scoring, betting, learning, recap([
+    `Every piece in the dictionary gets a score from the token’s final row; softmax turns the ${s.vocab.length} scores into a bet.`,
+    '<strong>Surprise</strong> is how unlikely the model found the real next piece; training nudges every weight to lower it.',
+    'That single game — predict the next piece — is all a language model is trained on. Using it afterwards (inference) changes nothing.',
+  ]), chapterNav('output.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });
