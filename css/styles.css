@@ -617,3 +617,4 @@ dfn.term:hover::after, dfn.term:focus::after { max-width: min(22rem, 85vw); }
 @media (max-width: 600px) { dfn.term:hover::after, dfn.term:focus::after { position: fixed; left: 1rem; right: 1rem; bottom: 1rem; top: auto; width: auto; max-width: none; } }
 .quiz-a.miss { background: var(--warm); border-color: var(--warm); color: #fff; }
 @media (max-width: 760px) { .nav-tools .undo-group { display: inline-flex; } .nav-tools { margin-left: auto; } .nav-select { margin-left: 0; } }
+.moved-note { color: var(--warm); font-weight: 600; }

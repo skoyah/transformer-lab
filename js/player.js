@@ -13,6 +13,44 @@ export const SPEEDS = { slow: 2400, normal: 1300, fast: 500 };
 
 const players = new Map(); // id -> { step, playing, timer, scene, onFinish }
 
+// What each stage's result table showed the last time it was played to the
+// end (cell text by "r,c"), so a replay after a change can show what moved.
+const lastSeen = new Map();
+function readResultCells(root) {
+  const tables = root.querySelectorAll('.player-stage table.matrix');
+  const table = tables[tables.length - 1];
+  const cells = new Map();
+  if (!table) return cells;
+  table.querySelectorAll('td[data-r]').forEach((td) => { const v = Number(td.textContent.replace('−', '-')); if (Number.isFinite(v)) cells.set(`${td.dataset.r},${td.dataset.c}`, v); });
+  return cells;
+}
+
+// After a replay, mark the cells that changed since the last play.
+function showMoved(root, id, p) {
+  const before = lastSeen.get(id);
+  const now = readResultCells(root);
+  lastSeen.set(id, now);
+  if (!before || !p.pendingDelta) return;
+  p.pendingDelta = false;
+  const tables = root.querySelectorAll('.player-stage table.matrix');
+  const table = tables[tables.length - 1];
+  let moved = 0, total = 0;
+  table.querySelectorAll('td[data-r]').forEach((td) => {
+    const key = `${td.dataset.r},${td.dataset.c}`;
+    if (!before.has(key) || !now.has(key)) return;
+    total++;
+    const delta = now.get(key) - before.get(key);
+    if (Math.abs(delta) < 0.005) return;
+    moved++;
+    td.classList.add(delta > 0 ? 'moved-up' : 'moved-down', 'flash');
+    td.title = `was ${before.get(key).toFixed(2)}, now ${now.get(key).toFixed(2)} (${delta > 0 ? '+' : ''}${delta.toFixed(2)})`;
+    td.append(el('span', { class: 'delta', text: delta > 0 ? '▲' : '▼' }));
+  });
+  if (!total) return;
+  const cap = root.querySelector('.player-caption .caption-text');
+  if (cap) cap.append(el('span', { class: 'moved-note', text: ` ${moved} of ${total} numbers moved since you last played this${p.pendingCause === 'training' ? ' — that is what training did' : ''}.` }));
+}
+
 // An upstream input changed: affected players go back to idle. Nothing replays by itself.
 onChange((event) => {
   if (event.quiet) return;
@@ -23,6 +61,7 @@ onChange((event) => {
     clearTimeout(p.timer);
     p.onFinish = null;
     p.step = 0;
+    if (lastSeen.has(id)) { p.pendingDelta = true; p.pendingCause = event.training ? 'training' : 'edit'; }
   }
 });
 
@@ -71,6 +110,7 @@ function renderInto(root, id) {
   const frame = p.scene.frame(p.step);
   root.classList.toggle('idle', p.step === 0);
   root.classList.toggle('done', p.step === p.total);
+  const justFinished = p.step === p.total && p.total > 0;
   root.classList.toggle('playing', p.playing);
   const overlay = root.querySelector(':scope > .hl-layer') || el('div', { class: 'hl-layer' });
   root.replaceChildren(
@@ -95,6 +135,7 @@ function renderInto(root, id) {
       animateStep(root, speedMs());
       if (frame.animate) frame.animate(root, speedMs());
     }
+    if (justFinished && p.track) setTimeout(() => { if (root.isConnected && p.step === p.total) showMoved(root, id, p); }, animate ? speedMs() * 0.6 : 0);
   }, 0);
   bindHover(root, p);
   bindCellRefs(root);
