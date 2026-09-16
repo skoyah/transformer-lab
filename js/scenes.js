@@ -49,7 +49,7 @@ export function matmulScene({
           filled: (r, c) => r * m + c < k, hlCell: k ? [i, j] : null, pulse: k ? [i, j] : null })),
       ]);
       if (!k) return { body, caption: idle };
-      const caption = `${cellRef(i, j, `<b>${cTitle}[${i}][${j}]</b>`)} — row “${esc(aRows[i])}” of ${aTitle} dotted with ${bByRow ? 'row' : 'column'} <b>${esc(bCols[j])}</b> of ${bTitle}.`
+      const caption = `${cellRef(i, j, `<b>${cTitle}[${i}][${j}]</b>`)} — row “${esc(aRows[i])}” of ${aTitle} multiplied number-by-number with ${bByRow ? 'row' : 'column'} <b>${esc(bCols[j])}</b> of ${bTitle}, then summed.`
         + (k === n * m ? ` ${doneCaption(done || `All ${n}×${m} cells of ${cTitle} are computed.`)}` : '');
       const tailHtml = tail ? tail(i, j) : '';
       return { body, caption, worked: dotExample(`${cTitle}[${aRows[i].replace(/^.* /, '')}][${j}]`, A[i], colOf(j), { aName: `${aTitle}[${aRows[i]}]`, bName: `${bTitle}[${bByRow ? bCols[j] : ':,' + bCols[j]}]`, tail: tailHtml, extra: extraOf(i, j) }) };
@@ -77,7 +77,7 @@ function matmulRowScene({ A, B, C, aTitle, bTitle, cTitle, aRows, aCols, bCols, 
         result(matrixTable({ title: cTitle, matrix: C, rowLabels: aRows, colLabels: bCols, heat: cHeat, decimals: cDecimals, filled: (r) => r < k, hlRow: i })),
       ]);
       if (!k) return { body, caption: `${idle} (${n}×${m} cells — this table is big, so each step fills a whole row; hover any cell for its arithmetic.)` };
-      const caption = `Row <b>${i}</b> — “${esc(aRows[i])}” of ${aTitle} dotted with every ${bByRow ? 'row' : 'column'} of ${bTitle}: ${m} dot products.`
+      const caption = `Row <b>${i}</b> — “${esc(aRows[i])}” of ${aTitle} multiplied and summed with every ${bByRow ? 'row' : 'column'} of ${bTitle}: ${m} agreement scores.`
         + (k === n ? ` ${doneCaption(done || `All ${n}×${m} cells of ${cTitle} are computed.`)}` : '');
       return { body, caption, worked: dotExample(`${cTitle}[${i}][0]`, A[i], colOf(0), { aName: `${aTitle}[${i}]`, bName: `${bTitle}[${bByRow ? 0 : ':,0'}]`, tail: tail ? tail(i, 0) : ' <span class="eq">… and likewise for the other cells of the row</span>' }) };
     },

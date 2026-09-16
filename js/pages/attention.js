@@ -66,7 +66,7 @@ function render() {
         el('span', { class: 'fig-caption', style: 'margin:0', text: '⌘Z to undo.' }),
       ])),
     ]),
-    prose(`<p>Multiplying X by each table gives three new tables with one row per token. Each cell is a dot product: a row of X against a column of the weight table.</p>`),
+    prose(`<p>Each cell of the three new tables is an <strong>agreement score</strong> between a row of X and a column of the weight table: multiply the two number by number and add up. Two rows “agree” when their big numbers line up in the same places. (The formal name is a dot product.)</p>`),
     projection('Q', 'Wq', 'Q — questions', 'question per token'),
     projection('K', 'Wk', 'K — badges', 'badge per token'),
     projection('V', 'Wv', 'V — notes', 'note per token'),
@@ -74,8 +74,7 @@ function render() {
   ]);
 
   const scoring = lesson('Compare every question with every badge', [
-    prose(`<p>How well does the question of one word match the badge of another? Multiply the two rows number by number and add up. That's a <strong>dot product</strong>, and it is large when the two rows point the same way. Doing this for every pair gives a square table: rows are the words asking, columns are the words answering.</p>
-      <p>First a bit of bookkeeping: flipping K on its side (Kᵀ) is what lets one multiplication produce the whole table.</p>`),
+    prose(`<p>How well does the question of one token match the badge of another? The same agreement score: multiply the two rows number by number and add up. Doing this for every pair gives a square table — rows are the tokens asking, columns the tokens answering. (Flipping K on its side, Kᵀ, is bookkeeping that lets one multiplication produce the whole table.)</p>`),
     player({ id: 'KT', scene: transposeScene({ K: sliceRows(d.K, win), KT: sliceCols(d.KT, win), tokens: toks, dims, idle: 'Press play to turn each row of K into a column.' }) }),
     player({ id: 'scores', scene: matmulScene({
       A: sliceRows(d.Q, win), B: sliceCols(d.KT, win), C: sliceBoth(d.scores, win), aTitle: 'Q', bTitle: 'Kᵀ', cTitle: 'Scores', aRows: toks, aCols: dims, bCols: toks,
@@ -107,7 +106,7 @@ function render() {
   ]);
 
   const softmax = lesson('Turn matches into shares', [
-    prose(`<p>Scores can be any size, positive or negative. What we want is, for each asking word, a set of <strong>shares</strong> that add up to 100%: “take 60% of this note, 30% of that one, 10% of the other.” The function that does this is called <strong>softmax</strong>: raise <em>e</em> to each score (so everything is positive and bigger scores pull far ahead), then divide by the total.</p>`),
+    prose(`<p>Scores can be any size, positive or negative. What we want is, for each asking token, a set of <strong>shares</strong> that add up to 100%: “take 60% of this note, 30% of that one, 10% of the other.” The function that does this is called <strong>softmax</strong>: raise a fixed number, <em>e</em> ≈ 2.72, to the power of each score — that makes everything positive and lets big scores pull far ahead — then divide by the total.</p>`),
     el('div', { style: 'margin-bottom:-.6rem' }, compareToggle(render)),
     player({ id: 'attentionWeights', scene: rowScene({
       inputs: [{ title: 'Scaled scores', matrix: scaledWin, rowLabels: toks, colLabels: colLabelsE }],
@@ -152,8 +151,8 @@ function render() {
       <li>Make one number in <strong>Wk</strong> large (say 5). One badge becomes very “loud”; see a column of the attention table darken.</li>
       <li>Untick “no peeking”. The top-right of the table fills in — words now look at the future.</li>
     </ul>`, null, [
-      { label: 'Wq → all zeros', run: () => setWeights({ Wq: s.weights.Wq.map((r) => r.map(() => 0)) }), then: 'attentionWeights' },
-      { label: 'Wk[0][0] → 5', run: () => setWeightCell('Wk', 0, 0, 5), then: 'attentionWeights' },
+      { label: 'Blank every question (Wq → 0)', run: () => setWeights({ Wq: s.weights.Wq.map((r) => r.map(() => 0)) }), then: 'attentionWeights' },
+      { label: 'Make one badge very loud (Wk[0][0] = 5)', run: () => setWeightCell('Wk', 0, 0, 5), then: 'attentionWeights' },
       { label: s.config.causal ? 'Allow peeking' : 'No peeking again', run: () => setCausal(!getExperiment().config.causal), then: 'scaledScores' },
     ]),
     callout('key', `<p>Attention is just: <em>score every pair, turn scores into shares, blend</em>. Real models run several of these side by side (“heads”, each working on a slice of the numbers, their results joined by one more table) and stack many layers — but each head does exactly what this page does.</p>`),

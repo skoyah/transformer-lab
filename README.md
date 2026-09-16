@@ -36,6 +36,10 @@ ES modules need an HTTP origin; opening `index.html` via `file://` will not work
 
 Snapshots store the persistent experiment only; loading one rebuilds the model and recomputes everything.
 
+## Modes
+
+**Lesson** (default) is the class: read-only tables, simple players (Play / Next / scrub), a "Where we are" bridge and an "After this chapter you can…" goal on every chapter, recaps, glossary tooltips on first use of each term. **Lab** (switch in the nav) makes every weight editable and shows the extras: presets, compare-with-untrained, the nudge-one-number widget, hidden-unit list, settings, bookmarks, share link, NumPy export.
+
 ## Interaction
 
 - Every stage is a step-through player; each step animates (source cells fly into the result, highlights slide, numbers count up). Space / ←→ / Home / End control a focused player; "Play this chapter" runs them in order.

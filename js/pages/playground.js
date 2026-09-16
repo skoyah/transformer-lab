@@ -162,7 +162,8 @@ function render() {
 
   const intro = lesson('The keyboard on your phone', [
     prose(`<p>When you type a message and three suggested words appear above the keyboard, a language model made those bets: your words were turned into tokens, a model scored every word in its dictionary as the next one, and the top three came out. Keyboard models are small and vary in design, but that job — <em>score the next token</em> — is exactly the one in this book, and chatbots do it in a loop: pick a token, add it to the text, run again.</p>
-      <p>Below, the exact model you have been reading about does both jobs. To make the difference visible, it runs twice: once with <strong>freshly rolled weights</strong> (the same random start you had before touching anything), and once with <strong>your current weights</strong>, ${steps ? `after ${steps} training step${steps > 1 ? 's' : ''}` : 'which you have not trained yet'}.</p>`),
+      <p>Below, the exact model you have been reading about does both jobs. To make the difference visible, it runs twice: once with <strong>freshly rolled weights</strong> (the same random start you had before touching anything), and once with <strong>your current weights</strong>, ${steps ? `after ${steps} training step${steps > 1 ? 's' : ''}` : 'which you have not trained yet'}.</p>
+      <p>Once trained, the weights stop moving: using the model — <strong>inference</strong> — is Chapters 1 to 5 with the numbers frozen. Typing at a chatbot teaches it nothing; its weights were set long before you arrived.</p>`),
     steps ? null : callout('try', `<p>You haven't trained the model yet, so both sides will look equally clueless. Press <strong>Train 25 steps</strong> below (or go to Chapter 5) and come back — that's the whole point of this page.</p>`),
   ]);
 
@@ -233,7 +234,7 @@ function render() {
       <li>Train 25 steps and compare the two columns. The fresh model spreads its bets thinly; yours should reproduce your text almost word for word — it has memorised it, which is all a tiny model trained on one sentence can do.</li>
       <li>Start the prompt with a word from the <em>middle</em> of your text. Does your model continue correctly from there?</li>
       <li>Turn creativity up to 1.5 and hit “different draw” a few times. Same weights, different words — that's sampling, and it's why a chatbot with the temperature above zero rarely answers the same way twice.</li>
-      <li>Change the training text on the Start page to two or three sentences that share words, train 50 steps, and see if it learns to switch between them.</li>
+      <li>Change the training text on the Start page to two or three sentences that share words, train 50 steps, and see if it learns to switch between them. Then prompt it with a fourth sentence it never saw: surprise on unseen text is what <strong>generalising</strong> means, and this model, trained on a few sentences, does it badly — which is exactly why real models need trillions of pieces.</li>
     </ul>`),
   ]);
 

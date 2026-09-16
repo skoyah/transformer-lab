@@ -40,7 +40,7 @@ function render() {
 
   const residual = lesson('Keep the original, add what you heard', [
     lensBar(d.tokens),
-    prose(`<p>After attention, each word holds Z — a blend of other words' notes. But we don't want the word to <em>forget itself</em>. So instead of replacing X with Z, we add them: the word keeps its own row and gets the gathered information on top. This is called a <strong>residual connection</strong>, and it is one of the reasons deep networks are trainable at all.</p>`),
+    prose(`<p>After attention, each token holds Z — a blend of other tokens' notes. We don't want it to <em>forget itself</em>, so instead of replacing X with Z we add them: the token keeps its own row and gets the gathered information on top. This is a <strong>residual connection</strong>; it is what lets networks with many stacked blocks (“deep” networks) be trained at all.</p>`),
     callout('idea', `<p>It's editing with track changes rather than retyping the document. The original text stays; attention only has to propose the <em>changes</em>. Small, safe edits are much easier to learn than rewriting everything from scratch.</p>`),
     player({ id: 'residual1', scene: rowScene({
       inputs: [
@@ -55,7 +55,7 @@ function render() {
   ]);
 
   const norm = lesson('Normalise the volume', [
-    prose(`<p>Adding things together makes numbers drift: some rows end up loud, others quiet. Before the next step we standardise each row so it has an average of 0 and a typical spread of 1. This is <strong>layer normalisation</strong>. It removes each row's average and rescales its spread, which keeps every later stage working in a comfortable range.</p>`),
+    prose(`<p>Adding things together makes numbers drift: some rows end up loud, others quiet. <strong>Layer normalisation</strong> standardises each row — average 0, spread 1 — so every later stage works in a comfortable range.</p>`),
     player({ id: 'norm1', scene: rowScene({
       inputs: [{ title: 'R₁', matrix: W(d.residual1), rowLabels: toks, colLabels: dims }],
       output: { title: 'N₁ — normalised', matrix: W(d.norm1), rowLabels: toks, colLabels: dims },
@@ -69,8 +69,8 @@ function render() {
   const think = lesson('A moment of private thought', [
     prose(`<p>Attention moved information <em>between</em> words. Now each word, on its own, gets to process what it has. It goes through a tiny two-layer network — the <strong>feed-forward</strong> block:</p>
       <ol>
-        <li>expand from ${s.config.dim} numbers to ${s.config.hidden} (W₁, plus a bias b₁) — more room to think;</li>
-        <li>keep only the positive results (<strong>ReLU</strong>) — the only non-linear step inside this block; without it the two layers would collapse into one multiplication;</li>
+        <li>expand from ${s.config.dim} numbers to ${s.config.hidden} (multiply by W₁, then add a <strong>bias</strong> b₁ — a fixed nudge added to every result) — more room to think;</li>
+        <li>keep only the positive results (<strong>ReLU</strong>) — each of the ${s.config.hidden} columns is a “<strong>hidden unit</strong>”, one little detector that either fires or stays at 0;</li>
         <li>squeeze back to ${s.config.dim} numbers (W₂, plus b₂).</li>
       </ol>
       <p>The same small network is applied to every row separately; the rows don't interact here at all.</p>`),
@@ -84,7 +84,8 @@ function render() {
         matrixTable({ title: 'W₂ — squeeze', matrix: s.weights.W2, rowLabels: hid, colLabels: dims, editable: true, onEdit: (r, c, v) => setWeightCell('W2', r, c, v) }),
         matrixTable({ title: 'b₂', matrix: [s.weights.b2], rowLabels: ['bias'], colLabels: dims, editable: true, onEdit: (r, c, v) => setWeightCell('b2', r, c, v) }),
       ]),
-      el('p', { class: 'fig-caption', text: 'The feed-forward weights. In a standard transformer block the feed-forward part holds about two thirds of the block’s weights (8d² against 4d² for attention), and studies of what the network stores find much of its factual “knowledge” here.' }),
+      el('p', { class: 'fig-caption', text: 'The feed-forward weights: W₁ and b₁ expand, W₂ and b₂ squeeze back.' }),
+      underHood('H = ReLU(N₁·W₁ + b₁)   F = H·W₂ + b₂', `<p>Without ReLU the two multiplications would collapse into a single one, so it is the only genuinely non-linear step inside this block. In a standard transformer block the feed-forward part holds about two thirds of the block's weights (8d² against 4d² for attention), and studies of what the network stores find much of its factual “knowledge” here.</p>`),
     ]),
     player({ id: 'ffnHidden', scene: matmulScene({
       A: W(d.norm1), B: s.weights.W1, C: W(d.ffnHidden), aTitle: 'N₁', bTitle: 'W₁', cTitle: 'H', aRows: toks, aCols: dims, bCols: hid,
@@ -139,8 +140,8 @@ function render() {
       <li>Set every value of <strong>b₁</strong> to −5. ReLU now blocks everything, H becomes all zeros, and F collapses to just b₂ for every word.</li>
       <li>Set <strong>W₂</strong> to all zeros. The block's thought contributes nothing; N₂ becomes a normalised copy of N₁ — the residual path alone carries the signal.</li>
     </ul>`, null, [
-      { label: 'b₁ → −5 everywhere', run: () => setWeights({ b1: s.weights.b1.map(() => -5) }), then: 'ffnHidden' },
-      { label: 'W₂ → all zeros', run: () => setWeights({ W2: s.weights.W2.map((r) => r.map(() => 0)) }), then: 'norm2' },
+      { label: 'Block everything at ReLU (b₁ = −5)', run: () => setWeights({ b1: s.weights.b1.map(() => -5) }), then: 'ffnHidden' },
+      { label: 'Silence the thought (W₂ = 0)', run: () => setWeights({ W2: s.weights.W2.map((r) => r.map(() => 0)) }), then: 'norm2' },
     ]),
     callout('key', `<p>A transformer block is two moves, each wrapped in “add to the original and normalise”: <em>attention</em> (words exchange information) and <em>feed-forward</em> (each word processes it alone).</p>`),
   ]);

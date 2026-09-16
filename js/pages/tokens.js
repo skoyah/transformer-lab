@@ -71,19 +71,22 @@ function render() {
   ]);
 
   const pieces = lesson('Step one: cut it into pieces', [
-    prose(`<p>The model doesn't work with a sentence, it works with a list of <strong>tokens</strong>. The obvious choice — one token per word — has two problems. A word the model has never seen is a dead end: there is no row for it. And the dictionary grows without bound, because every spelling, every name and every typo needs its own entry. Cutting into single letters fixes both, but then a sentence becomes a very long list and the model has to relearn what “cat” is from c, a, t every time.</p>
-      <p>So real models cut text into <strong>pieces</strong> that range from a single character up to a whole common word: “tokenization” might become “token” + “ization”; a rare name becomes a handful of fragments; “the” stays one piece. Nothing is a dead end, because in the worst case a word falls apart into characters. This book uses the most common way of deciding the pieces, <strong>byte-pair encoding</strong> (BPE), used in some variant by GPT, Llama and Mistral.</p>
-      <p>BPE is learned, not designed. Start from the smallest units — not letters but the <strong>256 possible bytes</strong>, so that any character in any language, and any emoji, can be represented (a letter like “ã” is two bytes, “🍓” is four). Count which two neighbouring symbols sit next to each other most often, glue them into one new symbol, and repeat. Every merge is learned from a body of text — a real tokenizer's from billions of words, this book's from a small corpus of ${corpusWords} words of plain English that ships with it. The merges are learned once and then frozen; your sentence is cut with them, it does not change them. Case is kept: “Hello” and “hello” start as different bytes and end as different tokens, exactly as in GPT-style models.</p>`),
-    callout('idea', `<p>It is how you learn to read fast. At first you spell out c-a-t; after seeing “cat” a few hundred times, it is one glance. Rare words you still sound out in chunks. BPE does the same by counting.</p>`),
-    player({ id: 'bpe', track: false, key: `corpus|${tok.merges}`, scene: bpeScene({
-      initial: bpe.initial, merges: bpe.merges, steps: bpe.steps, corpusWords, totalMerges: bpe.merges.length,
-      idle: `Press play to watch the first ${BPE_PLAYER_STEPS} of the ${bpe.merges.length} merges being learned from the corpus. Each step first lights up every place the winning pair occurs, then glues it. ▁ is the space byte in front of a word, so “${WORD_START}t” (t starting a word) and “t” (t inside a word) are different symbols.`,
-    }) }),
+    prose(`<p>The model doesn't work with a sentence, it works with a list of <strong>tokens</strong> — pieces of text. Most pieces are whole words; a rare or unusual word is cut into smaller pieces; in the worst case a piece is a single character. Press play to watch your sentence being cut. Each token also gets a <strong>position</strong>: 0 for the first, 1 for the second, and so on. Hold on to that; it matters in Chapter 2.</p>`),
     lensBar(d.tokens),
-    prose(`<p>With the merges learned, tokenising is mechanical: cut every word into bytes and apply the ${bpe.merges.length} merges in order. Your text is ${chars} characters, ${words.length} words, and ${d.tokens.length} tokens. Each token also gets a <strong>position</strong>, 0 for the first, 1 for the second, and so on. Hold on to that; it matters in Chapter 2.</p>`),
     player({ id: 'tokens', scene: tokenizeScene({ sentence: s.sentence, tokens: d.tokens, spans: tokenSpans(s.sentence, tok), win, idle: `Press play to scan the sentence and pull out one token at a time${win.partial ? ` (positions ${win.start}–${win.end - 1}; slide the lens for the rest)` : ''}.` }) }),
+    prose(`<p>Why pieces, and not simply words? One token per word has two problems. A word the model has never seen is a dead end — there is no row for it. And the dictionary grows without bound, because every spelling, every name and every typo needs its own entry. Cutting into single letters fixes both, but then every sentence becomes a very long list and the model has to relearn what “cat” is from c, a, t each time. Pieces are the compromise real models use: “tokenization” might become “token” + “ization”; a rare name becomes a handful of fragments; “the” stays one piece.</p>`),
     tokeniseAnything(cut),
     strawberryCallout(cut),
+    el('details', { class: 'under-hood detour' }, [
+      el('summary', { text: 'Where do the pieces come from? (a short detour)' }),
+      prose(`<p>The recipe is called <strong>byte-pair encoding</strong> (BPE), used in some variant by GPT, Llama and Mistral. It is learned, not designed. Start from the smallest units — not letters but the <strong>256 possible bytes</strong>, so that any character in any language, and any emoji, can be represented (a letter like “ã” is two bytes, “🍓” is four). Count which two neighbouring symbols sit next to each other most often, glue them into one new symbol, and repeat. A real tokenizer learns from billions of words; this book learns its ${bpe.merges.length} merges once from a small corpus of ${corpusWords} words of plain English that ships with it. The merges are then frozen; your sentence is cut with them, it does not change them. Case is kept: “Hello” and “hello” end up as different tokens.</p>`),
+      callout('idea', `<p>It is how you learn to read fast. At first you spell out c-a-t; after seeing “cat” a few hundred times, it is one glance. Rare words you still sound out in chunks. BPE does the same by counting.</p>`),
+      player({ id: 'bpe', track: false, key: `corpus|${tok.merges}`, scene: bpeScene({
+        initial: bpe.initial, merges: bpe.merges, steps: bpe.steps, corpusWords, totalMerges: bpe.merges.length,
+        idle: `Press play to watch the first ${BPE_PLAYER_STEPS} of the ${bpe.merges.length} merges being learned from the corpus. Each step first lights up every place the winning pair occurs, then glues it. ▁ is the space byte in front of a word, so “${WORD_START}t” (t starting a word) and “t” (t inside a word) are different symbols.`,
+      }) }),
+      prose(`<p>With the merges learned, tokenising is mechanical: cut every word into bytes and apply the ${bpe.merges.length} merges in order. Your text is ${chars} characters, ${words.length} words, and ${d.tokens.length} tokens.</p>`),
+    ]),
   ]);
 
   const numbering = lesson('Step two: give every piece a number', [
@@ -96,8 +99,8 @@ function render() {
       <li>Repeat a word. Its pieces get the same IDs each time. The model can't yet tell the two copies apart — Chapter 2 fixes that.</li>
       <li>Put a made-up word, or an emoji, in your prompt in Chapter 6. It still becomes tokens the model can use — that is the whole point of a byte-level dictionary: it can never meet a piece it doesn't know.</li>
     </ul>`, null, [
-      { label: 'Add “hat” to the text', run: () => setSentence(`${getExperiment().sentence} hat`), then: 'tokenIds' },
-      { label: `Repeat “${esc(words[0] || '')}” at the end`, run: () => setSentence(`${getExperiment().sentence} ${words[0] || ''}`), then: 'tokenIds' },
+      { label: 'Add the word “hat” to my text', run: () => setSentence(`${getExperiment().sentence} hat`), then: 'tokenIds' },
+      { label: `Repeat “${esc(words[0] || '')}” at the end of my text`, run: () => setSentence(`${getExperiment().sentence} ${words[0] || ''}`), then: 'tokenIds' },
     ]),
     callout('key', `<p>A token is whatever the tokenizer says it is — often a word, sometimes a fragment, occasionally a single character. Ticket numbers carry no meaning: “cat” being 1 and “sat” being 2 does not make them similar. Meaning is added in the next chapter, and it is learned. Real vocabularies hold from about 30,000 pieces (BERT) through 50,257 (GPT-2) and 128,000 (Llama 3) to 256,000 (Gemma), learned once from a huge corpus and then frozen.</p>`),
     underHood('merges = learnBpe(corpus, 300)   tokens = applyBpe(text, merges)   ids = tokens.map(t => vocab.indexOf(t))   vocab = 256 bytes + 300 merges',

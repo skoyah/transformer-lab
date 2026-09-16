@@ -131,7 +131,7 @@ function render() {
   ]);
 
   const betting = lesson('Turn scores into a bet', [
-    prose(`<p>Softmax again — the same move as in attention — turns each row of scores into probabilities that add up to 100%. Now the model is making a proper bet: “after this word, I'd put 40% on <em>sat</em>, 25% on <em>the</em>…”. The favourite is its prediction.</p>`),
+    prose(`<p>Softmax again — the same move as in attention — turns each row of scores into probabilities that add up to 100%: a proper bet on the next piece. The favourite is the prediction.</p>`),
     player({ id: 'probs', scene: rowScene({
       inputs: [{ title: 'Piece scores', matrix: logitsView(W(d.logits)), rowLabels: toks, colLabels: colsPlus }],
       output: { title: 'Probabilities', matrix: probsView(W(d.probs)), rowLabels: toks, colLabels: colsPlus, heat: 'sequential', cornerLabel: 'after \\ piece' },
@@ -165,9 +165,9 @@ function render() {
     prose(`<p>How wrong is the model? We measure its <strong>surprise</strong>: for each position, take the probability it gave to the word that actually came next and ask “how unlikely did it think that was?” Give the right word 100% and surprise is 0; 50% is 0.69; 10% is 2.3; 1% is 4.6. (It's −log of the probability.) Averaged over the text, that single number is what training tries to push down. Its formal name is cross-entropy loss.</p>`),
     el('div', { class: 'worked', html: `<span class="lhs">surprise at position ${t}</span><span class="eq">=</span> −log P(“${esc(d.tokens[t + 1])}” after “${esc(d.tokens[t])}”) <span class="eq">=</span> −log <b>${fmt(pActual, 3)}</b> <span class="eq">=</span> <span class="result">${fmt(-Math.log(Math.max(pActual, 1e-12)))}</span> &nbsp; <span class="eq">— guessing evenly among the ${s.vocab.length} pieces would be −log(1/${s.vocab.length}) = ${fmt(baseline)}</span>` }),
     prose(`<p>Training is remarkably unglamorous. For every one of the ${paramCount} numbers in the weight tables, ask “if I nudged this up a hair, would surprise go up or down?” — then move it a small step the helpful way. The size of that step is the <strong>learning rate</strong>. Repeat.</p>
-      <p>Trying every nudge one by one works but is slow (two full runs per number). There is a trick: the chain rule lets you get every slope from a <em>single</em> pass backwards through the stages — <strong>backpropagation</strong>. That is what the buttons below use. The widget after the analogy does it the slow way for one number, so you can see they agree.</p>`),
+      <p>These numbers are the model's <strong>parameters</strong> — ${paramCount} here, tens of billions in a chatbot — and training moves nothing else. Getting every slope from a single pass backwards through the stages is called <strong>backpropagation</strong>; that is what the Train buttons use.</p>
+      <p>Why does this produce anything useful? Because to keep surprise low across millions of sentences, the cheapest strategy is to actually learn grammar, facts and style. Everything a chatbot appears to know is a side effect of getting good at this one game.</p>`),
     callout('idea', `<p>It's tuning an instrument with ${paramCount} pegs at once. Trying each peg by ear works; backpropagation is like knowing, from the way the chord sounds, which way every peg should turn — all at once, from one listen.</p>`),
-    nudgeBox,
     el('div', { class: `card player ${training.running ? 'playing' : ''}`, dataset: { stage: 'training' } }, [
       el('div', { class: 'kpis' }, [
         el('div', {}, [el('b', { text: fmt(loss, 3) }), el('span', { text: 'surprise right now (lower is better)' })]),
@@ -183,19 +183,20 @@ function render() {
         el('span', { class: 'counter', text: training.running ? `${training.runSteps} this run` : '' }),
         el('label', { class: 'inline', style: 'margin-left:auto' }, ['Learning rate', lr]),
       ]),
-      el('p', { class: 'fig-caption', text: 'Every step rewrites the saved weight tables, so every stage in this book goes back to waiting: the embeddings moved, the attention pattern shifted, the bets sharpened. Replay any of them to see the new numbers.' }),
+      el('p', { class: 'fig-caption', text: 'Every step rewrites the saved weight tables, so every stage in this book goes back to waiting: the embeddings moved, the bets sharpened. Replay any of them to see the new numbers.' }),
     ]),
+    nudgeBox,
     callout('try', `<ul>
       <li>Train for a while, then replay the prediction stage above. Watch the ✓ column fill in and the surprise curve fall towards 0. Then revisit Chapter 2 — the embedding rows have moved (turn on “compare with the untrained model”).</li>
       <li>Set the learning rate to 1 and train. Too big a step overshoots: surprise may jump <em>up</em>. Bring it back to 0.1.</li>
       <li>Bookmark the model on the Start page before training, so you can compare before and after in Chapter 6.</li>
     </ul>`, null, [
       { label: 'Train 10 steps now', run: () => { pauseAll(); trainMany(10); }, then: 'prediction' },
-      { label: 'Learning rate → 1', run: () => setLearningRate(1) },
-      { label: 'Learning rate → 0.1', run: () => setLearningRate(0.1) },
+      { label: 'Take huge steps (learning rate 1)', run: () => setLearningRate(1) },
+      { label: 'Back to careful steps (learning rate 0.1)', run: () => setLearningRate(0.1) },
     ]),
     callout('key', `<p>A language model is nothing more than “predict the next token”, trained by nudging weights to be less surprised by real text. Everything it appears to know is a side effect of getting good at that one game.</p>`),
-    underHood('loss = mean over t of −log P[t][ id[t+1] ]        w ← w − lr · ∂loss/∂w', `<p>Gradients come from backpropagation (js/transformer.js, <code>gradients()</code>): softmax + cross-entropy → output projection → layer norm → feed-forward → layer norm → attention (softmax, scaling, Q/K/V) → embeddings and positions, each block the exact reverse of its forward line. The test suite checks it against central finite differences, (loss(w+ε) − loss(w−ε)) / 2ε, to 1e-6.</p>`),
+    underHood('loss = mean over t of −log P[t][ id[t+1] ]        w ← w − lr · ∂loss/∂w', `<p>Trying every nudge one by one works but costs two full runs per number; the chain rule gives every slope from one backward pass. Gradients here come from <code>gradients()</code> in js/transformer.js: softmax + cross-entropy → output projection → layer norm → feed-forward → layer norm → attention → embeddings and positions, each block the exact reverse of its forward line, checked against central finite differences, (loss(w+ε) − loss(w−ε)) / 2ε, to 1e-6.</p>`),
   ]);
 
   content.replaceChildren(chapterControls(STAGES_HERE), scoring, betting, learning, recap([

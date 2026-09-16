@@ -21,7 +21,7 @@ function render() {
   const location = lesson('Give every word a location', [
     prose(`<p>A piece's ID says <em>which</em> piece it is, nothing more. What the model needs is something it can do arithmetic with. So each piece gets a row of <strong>${dimCount} numbers</strong> — its <strong>embedding</strong>. You can think of them as coordinates: every piece is a point in a ${dimCount}-dimensional space, and pieces that behave alike end up near each other.</p>
       <p>Nobody types these numbers in. They start random and are <em>learned</em> — in Chapter 5 you'll watch them move. Real models use hundreds or thousands of numbers per piece; we use ${dimCount} so you can read them.</p>`),
-    callout('idea', `<p>Imagine describing food with ${dimCount} sliders — sweet, salty, spicy, crunchy. Every dish becomes ${dimCount} numbers, and “similar dishes” means “similar slider settings”. An embedding is the same idea for words, except the model decides for itself what the sliders mean.</p>`),
+    callout('idea', `<p>Imagine describing food with ${dimCount} sliders — sweet, salty, spicy, crunchy. Every dish becomes ${dimCount} numbers, and “similar dishes” means “similar slider settings”. An embedding is the same idea for pieces of text, except the model decides for itself what the sliders mean. These numbers are <strong>weights</strong>: training is allowed to move them, and nothing else about the model remembers anything.</p>`),
     el('div', { class: 'card figure' }, [
       compareToggle(render),
       matrixTable({
@@ -80,10 +80,10 @@ function render() {
       <li>Set an entire row of E to 0. That word becomes “blank”: its rows in X are now purely position. Watch what happens to it in Chapter 3.</li>
       <li>Make P all zeros. Repeated words become identical again, and the model loses any sense of order.</li>
     </ul>`, null, [
-      { label: `Blank out “${esc(d.tokens[0])}” (its row of E → 0)`, run: () => {
+      { label: `Make “${esc(d.tokens[0])}” meaningless (set its row of E to 0)`, run: () => {
         const E = getExperiment().weights.embedding.map((r) => r.slice()); E[d.tokenIds[0]] = E[d.tokenIds[0]].map(() => 0); setWeights({ embedding: E });
       }, then: 'embeddings' },
-      { label: 'Zero the position table', run: () => setWeights({ positional: getExperiment().weights.positional.map((r) => r.map(() => 0)) }), then: 'positionalInput' },
+      { label: 'Remove all sense of position (P → 0)', run: () => setWeights({ positional: getExperiment().weights.positional.map((r) => r.map(() => 0)) }), then: 'positionalInput' },
     ]),
     callout('key', `<p>From this point on, nothing is saved. X and everything after it are <span class="tag derived">recomputed</span> from E, P and the token IDs whenever any of them change — but only when you press play.</p>`),
     underHood('X[i] = E[ id[i] ] + P[i]', `<p>E is <code>vocab × d</code>, P is <code>positions × d</code>, X is <code>tokens × d</code>. Real models often learn P too, or use cleverer position tricks, but “add a position pattern” is the core idea.</p>`),
