@@ -1,6 +1,7 @@
-import { tokenize, forwardIds, generate, topK, lossOf, trainStep } from '../transformer.js';
+import { tokenize, forwardIds, generate, topK, lossOf, trainStep, crossEntropy } from '../transformer.js';
 import { getExperiment, getDerived, untrainedExperiment, setPlayground, trainMany, tokenizeLike, MAX_PROMPT_TOKENS } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs, recap } from '../ui.js';
+import { checkYourself } from '../quiz.js';
 import { player, groupControls } from '../player.js';
 import { worked } from '../scenes.js';
 
@@ -238,6 +239,30 @@ function render() {
     </ul>`),
   ]);
 
+  // ---- Does it generalise? surprise on text the model was never trained on ----
+  const heldOutText = pg.heldOut ?? 'the dog sat by the cat';
+  const heldIds = tokenizeLike(heldOutText).map((w) => s.vocab.indexOf(w)).filter((id) => id >= 0);
+  const heldLoss = heldIds.length > 1 ? crossEntropy(forwardIds(s, heldIds).probs, heldIds) : null;
+  const heldFresh = heldIds.length > 1 ? crossEntropy(forwardIds(fresh, heldIds).probs, heldIds) : null;
+  const heldInput = el('input', { type: 'text', value: heldOutText, 'aria-label': 'Held-out text', style: 'width:100%; font-family: var(--serif); font-size: 1.05rem',
+    onchange: (e) => setPlayground({ heldOut: e.target.value }) });
+  const generalise = lesson('Does it generalise?', [
+    prose(`<p>So far the model has only ever been tested on the text it was trained on. That is like grading a student on the exact questions they memorised. The real test is <strong>text it has never seen</strong>: if surprise stays low there, the model has learned something general; if it shoots up, it has only memorised. Type a sentence below that is <em>not</em> your training text.</p>`),
+    el('div', { class: 'card' }, [
+      el('label', {}, ['A sentence the model was never trained on', heldInput]),
+      el('div', { class: 'kpis', style: 'margin-top:.9rem' }, [
+        el('div', {}, [el('b', { text: fmt(lossNow, 2) }), el('span', { text: 'surprise on the training text' })]),
+        el('div', {}, [el('b', { text: heldLoss == null ? '–' : fmt(heldLoss, 2) }), el('span', { text: 'surprise on the unseen text' })]),
+        el('div', {}, [el('b', { text: heldFresh == null ? '–' : fmt(heldFresh, 2) }), el('span', { text: 'unseen text, fresh model' })]),
+        el('div', {}, [el('b', { text: fmt(Math.log(s.vocab.length), 2) }), el('span', { text: `guessing evenly among ${s.vocab.length}` })]),
+      ]),
+      el('p', { class: 'fig-caption', text: heldLoss == null ? 'Type a few words.' : (heldLoss > lossNow + 1
+        ? `Much more surprised by the unseen text than by its own: the model has memorised ${s.sentence.split(/\s+/).length} words, not learned English. That gap is called overfitting, and it is what you get from training a few hundred weights on one sentence.`
+        : `Similar surprise on seen and unseen text — it is generalising a little. Pieces it never saw in training still have random rows, so it can only do well on words it knows.`) }),
+    ]),
+    callout('key', `<p>Real models are trained on trillions of pieces and judged only on held-out text. The gap you see here is why: with little data, the cheapest way to lower surprise is to memorise; with a vast, varied corpus, the cheapest way is to learn the actual regularities of language — grammar, facts, style. More data, more weights and more blocks all serve that one goal.</p>`),
+  ]);
+
   const params = ['embedding', 'positional', 'Wq', 'Wk', 'Wv', 'W1', 'W2', 'Wout'].reduce((acc, k) => acc + s.weights[k].flat().length, 0) + s.weights.b1.length + s.weights.b2.length;
   const scale = lesson('Same recipe, a billion times bigger', [
     prose(`<p>What separates this toy from a chatbot is scale, not kind. Every ingredient you saw is there in production models — just more of it, stacked deeper, trained on trillions of words instead of one sentence.</p>`),
@@ -257,11 +282,11 @@ function render() {
     callout('key', `<p>Tokens → embeddings → attention → feed-forward → next-word bet, repeated. If you followed the numbers in this book, you understand the machine. The rest is engineering and scale.</p>`),
   ]);
 
-  content.replaceChildren(intro, demo, scale, recap([
+  content.replaceChildren(intro, demo, generalise, scale, recap([
     'A keyboard suggestion is one forward pass and a top-3; a chatbot is the same pass in a loop, one piece at a time.',
     'Once trained, the weights are frozen: using the model teaches it nothing. <strong>Temperature</strong> adds randomness to the pick.',
     'Trained on one sentence, this model memorises; trained on trillions of pieces, the same recipe learns grammar, facts and style — because that is the cheapest way to be less surprised.',
-  ]), chapterNav('playground.html'));
+  ]), checkYourself('playground.html'), chapterNav('playground.html'));
   if (active === prompt || active === tempInput || active === stepsInput) {
     active.focus({ preventScroll: true });
     if (sel) prompt.setSelectionRange(sel[0], sel[1]);

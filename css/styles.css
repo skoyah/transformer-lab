@@ -172,14 +172,14 @@ table.matrix thead th { position: sticky; top: 0; background: var(--paper); z-in
 table.matrix tbody th { position: sticky; left: 0; background: var(--paper); z-index: 1; }
 table.matrix thead th.corner { left: 0; z-index: 2; }
 .card table.matrix thead th, .card table.matrix tbody th { background: var(--paper); }
-table.matrix { border-collapse: separate; border-spacing: 2px; font-family: var(--mono); font-size: 12.5px; }
+table.matrix { border-collapse: separate; border-spacing: 2px; font-family: var(--mono); font-size: 13px; }
 table.matrix th { color: var(--muted); font: 500 12px/1.2 var(--sans); padding: .2rem .4rem; text-align: right; white-space: nowrap; }
 table.matrix thead th { text-align: center; padding-bottom: .35rem; }
 table.matrix td {
   padding: .3rem .45rem; text-align: right; min-width: 3.4rem; border-radius: 5px;
   background: var(--heat, var(--bg)); font-variant-numeric: tabular-nums; color: var(--ink);
 }
-table.matrix.small td { min-width: 2.7rem; padding: .18rem .3rem; font-size: 11.5px; }
+table.matrix.small td { min-width: 2.8rem; padding: .18rem .3rem; font-size: 12.5px; }
 table.matrix tr.hl th { color: var(--accent); font-weight: 700; }
 table.matrix tr.hl td { box-shadow: inset 0 0 0 1.5px var(--accent); }
 table.matrix tr.dim td { opacity: .45; }
@@ -476,7 +476,7 @@ table.matrix td.flash { animation: cellflash 1s ease-out; }
 .progress-pill:hover { background: var(--bg); color: var(--ink); }
 .progress-pill .bar { width: 72px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .progress-pill .fill { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width .4s; }
-@media (max-width: 900px) { .progress-pill { display: none; } }
+@media (max-width: 900px) { .progress-pill .txt { display: none; } .progress-pill { margin-left: .2rem; padding: .3rem .3rem; } }
 
 /* ---------- flow diagram ---------- */
 .flow-wrap { overflow-x: auto; }
@@ -593,3 +593,17 @@ button.big { font-size: 17px; padding: .8rem 1.4rem; border-radius: 12px; }
 details.map { margin: 0 0 2rem; }
 details.map > summary { cursor: pointer; font: 600 14px/1.4 var(--sans); color: var(--accent); padding: .6rem 0; }
 details.map .lesson { margin-top: 1rem; }
+
+/* ---------- check yourself ---------- */
+.card.quiz { border-left: 4px solid var(--accent); }
+.card.quiz .label { font: 700 12px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .6rem; }
+.quiz-q { margin: .8rem 0; }
+.quiz-question { margin: 0 0 .4rem; font-weight: 600; }
+.quiz-answers { display: flex; flex-wrap: wrap; gap: .4rem; }
+.quiz-a { font-size: 14px; text-align: left; }
+.quiz-a.ok { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.quiz-a.miss { background: var(--warm-soft); border-color: var(--warm); color: var(--warm); }
+.quiz-a.reveal:not(.ok) { border-style: dashed; border-color: var(--accent); }
+.quiz-feedback { font: 14px/1.5 var(--sans); margin: .4rem 0 0; }
+.quiz-feedback.ok { color: var(--accent); }
+.quiz-feedback.miss { color: var(--warm); }

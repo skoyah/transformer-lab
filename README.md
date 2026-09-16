@@ -38,7 +38,7 @@ Snapshots store the persistent experiment only; loading one rebuilds the model a
 
 ## Modes
 
-**Lesson** (default) is the class: read-only tables, simple players (Play / Next / scrub), a "Where we are" bridge and an "After this chapter you can…" goal on every chapter, recaps, glossary tooltips on first use of each term. **Lab** (switch in the nav) makes every weight editable and shows the extras: presets, compare-with-untrained, the nudge-one-number widget, hidden-unit list, settings, bookmarks, share link, NumPy export.
+**Lesson** (default) is the class: read-only tables, simple players (Play / Next / scrub), a "Where we are" bridge and an "After this chapter you can…" goal on every chapter, recaps, glossary tooltips on first use of each term, and a "Check yourself" quiz at the end of every chapter (answers saved). Chapter 6 has a "Does it generalise?" test on a sentence the model never saw. **Lab** (switch in the nav) makes every weight editable and shows the extras: presets, compare-with-untrained, the nudge-one-number widget, hidden-unit list, settings, bookmarks, share link, NumPy export.
 
 ## Interaction
 

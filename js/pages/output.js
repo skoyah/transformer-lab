@@ -1,6 +1,7 @@
 import { crossEntropy, lossOf, cloneWeights } from '../transformer.js';
 import { getExperiment, getDerived, setWeightCell, setWeights, setLearningRate, setCausal, train, trainStepAsync, trainMany, untrainedExperiment, usedIds } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly, recap } from '../ui.js';
+import { checkYourself } from '../quiz.js';
 import { player, chapterControls, pauseAll, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, predictionScene, vec } from '../scenes.js';
 
@@ -203,7 +204,7 @@ function render() {
     `Every piece in the dictionary gets a score from the token’s final row; softmax turns the ${s.vocab.length} scores into a bet.`,
     '<strong>Surprise</strong> is how unlikely the model found the real next piece; training nudges every weight to lower it.',
     'That single game — predict the next piece — is all a language model is trained on. Using it afterwards (inference) changes nothing.',
-  ]), chapterNav('output.html'));
+  ]), checkYourself('output.html'), chapterNav('output.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

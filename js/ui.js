@@ -126,6 +126,11 @@ export function underHood(formula, html) {
   ]);
 }
 
+// A fold-out with its own title (no formula line).
+export function goDeeper(title, html) {
+  return el('details', { class: 'under-hood' }, [el('summary', { text: title }), el('div', { class: 'prose', html })]);
+}
+
 export function caption(text) { return el('p', { class: 'fig-caption', text }); }
 
 // A figure bound to a pipeline stage; flashes when that stage recalculates.

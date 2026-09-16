@@ -2,6 +2,7 @@ import { getExperiment, getDerived, setWeightCell, setWeights, setCausal, untrai
 import { forward } from '../transformer.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, figure, matrixTable, attentionArcs, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, sliceBoth, sliceCols, lensBar, labOnly, recap } from '../ui.js';
 import { SPEEDS } from '../player.js';
+import { checkYourself } from '../quiz.js';
 import { player, chapterControls } from '../player.js';
 import { matmulScene, rowScene, transposeScene, vec, cellRef } from '../scenes.js';
 
@@ -163,7 +164,7 @@ function render() {
     'Each token asks a <strong>question</strong> (Q), wears a <strong>badge</strong> (K) and carries a <strong>note</strong> (V) — three views of its own row.',
     'Every question is scored against every badge; softmax turns the scores into <strong>shares</strong> that add up to 100%.',
     'Each token’s new row is the notes of all tokens, blended by its shares. On one training text the shares stay nearly even — attention shines on varied text.',
-  ]), chapterNav('attention.html'));
+  ]), checkYourself('attention.html'), chapterNav('attention.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

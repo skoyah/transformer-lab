@@ -1,5 +1,6 @@
 import { getExperiment, getDerived, setWeightCell, setWeights, untrainedExperiment, usedIds } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, recap } from '../ui.js';
+import { checkYourself } from '../quiz.js';
 import { player, chapterControls } from '../player.js';
 import { lookupScene, rowScene, vec } from '../scenes.js';
 
@@ -93,7 +94,7 @@ function render() {
     `Each ticket number selects a row of ${dimCount} numbers from the embedding table E — the piece's learned “location”.`,
     'A position pattern P is added so two copies of the same piece are not identical.',
     'The result, X, is the input to the transformer block. From here on nothing is stored; everything is recomputed.',
-  ]), chapterNav('embeddings.html'));
+  ]), checkYourself('embeddings.html'), chapterNav('embeddings.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

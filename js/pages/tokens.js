@@ -2,6 +2,7 @@ import { getExperiment, getDerived, setSentence, sentenceProblem, usedIds } from
 import { bpeFor, tokenize, tokenizerOf, tokenizeWords, tokenSpans, WORD_START, BPE_PLAYER_STEPS } from '../transformer.js';
 import { CORPUS } from '../corpus.js';
 import { initPage, bindRender, el, esc, lesson, prose, callout, underHood, matrixTable, chapterNav, caption, windowOf, sliceRows, lensBar, pieceChips, recap } from '../ui.js';
+import { checkYourself } from '../quiz.js';
 import { player, chapterControls } from '../player.js';
 import { tokenizeScene, idScene, bpeScene } from '../scenes.js';
 
@@ -111,7 +112,7 @@ function render() {
     'Text is cut into <strong>pieces</strong> (tokens) by a fixed recipe learned from a corpus: common words stay whole, rare ones fragment, nothing is ever unknown.',
     'Every piece the tokenizer can make already has a <strong>ticket number</strong> in a fixed dictionary; your text is now a list of those numbers.',
     'The numbers carry no meaning yet — that is the next chapter.',
-  ]), chapterNav('tokens.html'));
+  ]), checkYourself('tokens.html'), chapterNav('tokens.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

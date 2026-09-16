@@ -80,7 +80,7 @@ export function createExperiment(overrides = {}) {
     snapshots: [],
     animation: { speed: 'normal' },
     progress: {},            // stageId -> 'done' once the reader has played it to the end
-    playground: { prompt: 'the cat', steps: 4, temperature: 0 },
+    playground: { prompt: 'the cat', steps: 4, temperature: 0, heldOut: 'the dog sat by the cat' },
     view: { start: 0, size: 12 },  // the lens: which positions the tables show
     mode: 'lesson',                // 'lesson' (follow the class) or 'lab' (everything editable)
     currentStep: 'index.html',
@@ -141,6 +141,7 @@ if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, tempera
 if (!state.progress) state.progress = {};
 if (!state.view) state.view = { start: 0, size: 12 };
 if (!state.mode) state.mode = 'lesson';
+if (!state.quiz) state.quiz = {};
 // The dictionary is the tokenizer's fixed vocabulary. Older saves (a growing
 // dictionary, other tokenizers) are moved onto it; rows of pieces that already
 // existed keep their trained values, the rest are seeded as usual.
@@ -277,7 +278,7 @@ if (typeof window !== 'undefined') {
     // playground, animation, …) are quiet; anything touching the model recalculates.
     const changedKeys = Object.keys({ ...state, ...incoming }).filter((k) => k !== 'updatedAt' && JSON.stringify(state[k]) !== JSON.stringify(incoming[k]));
     state = incoming;
-    const QUIET = new Set(['progress', 'playground', 'animation', 'currentStep', 'snapshots', 'learningRate', 'handEdited', 'view', 'mode', 'notice']);
+    const QUIET = new Set(['progress', 'playground', 'animation', 'currentStep', 'snapshots', 'learningRate', 'handEdited', 'view', 'mode', 'notice', 'quiz']);
     if (changedKeys.length && changedKeys.every((k) => QUIET.has(k))) {
       const event = { changedKeys, affected: [], state, quiet: true, external: true };
       for (const fn of listeners) fn(event);
@@ -388,6 +389,12 @@ export function clearProgress(stageIds) {
 export function setAnimation(prefs) {
   state.animation = { ...state.animation, ...prefs };
   commitQuiet(['animation']);
+}
+
+export function setQuiz(page, qi, answer) {
+  state.quiz = state.quiz || {};
+  state.quiz[page] = { ...(state.quiz[page] || {}), [qi]: answer };
+  commitQuiet(['quiz']);
 }
 
 export function setMode(mode) {

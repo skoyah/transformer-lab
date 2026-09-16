@@ -289,7 +289,14 @@ function bindHover(root, p) {
       }
     });
     td.addEventListener('mouseleave', clear);
+    // touch / keyboard: tap toggles the same view
+    td.addEventListener('click', (e) => {
+      if (td.classList.contains('hov-cell')) { clear(); return; }
+      td.dispatchEvent(new MouseEvent('mouseenter'));
+      e.stopPropagation();
+    });
   });
+  root.addEventListener('click', (e) => { if (!e.target.closest('td[data-r]')) clear(); });
 }
 
 // ---------------------------------------------------------------------------

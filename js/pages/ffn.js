@@ -1,5 +1,6 @@
 import { getExperiment, getDerived, setWeightCell, setWeights } from '../state.js';
-import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, matrixTable, normStrip, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly, recap } from '../ui.js';
+import { initPage, bindRender, el, esc, fmt, lesson, prose, callout, underHood, goDeeper, matrixTable, normStrip, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar, labOnly, recap } from '../ui.js';
+import { checkYourself } from '../quiz.js';
 import { player, chapterControls, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, vec } from '../scenes.js';
 
@@ -143,14 +144,15 @@ function render() {
       { label: 'Block everything at ReLU (b₁ = −5)', run: () => setWeights({ b1: s.weights.b1.map(() => -5) }), then: 'ffnHidden' },
       { label: 'Silence the thought (W₂ = 0)', run: () => setWeights({ W2: s.weights.W2.map((r) => r.map(() => 0)) }), then: 'norm2' },
     ]),
-    callout('key', `<p>A transformer block is two moves, each wrapped in “add to the original and normalise”: <em>attention</em> (words exchange information) and <em>feed-forward</em> (each word processes it alone).</p>`),
+    callout('key', `<p>A transformer block is two moves, each wrapped in “add to the original and normalise”: <em>attention</em> (tokens exchange information) and <em>feed-forward</em> (each token processes it alone).</p>`),
+    goDeeper('Go deeper: what a real block adds', `<p>Nothing here needs un-learning; production blocks add: <strong>several attention heads</strong> side by side, each on a slice of the numbers, joined by one more table (W<sub>o</sub>); <strong>normalise before</strong> each move rather than after (“pre-LN”, since GPT-2), which trains more stably; a learned <strong>scale and shift</strong> in each layer norm; <strong>dropout</strong> during training; often the output table tied to the embedding table; and dozens of these blocks stacked, the output of one being the X of the next.</p>`),
   ]);
 
   content.replaceChildren(chapterControls(STAGES_HERE), residual, norm, think, again, recap([
     '<strong>Add back</strong>: the attention result is added onto the token’s own row, so nothing is forgotten.',
     '<strong>Normalise</strong>: each row is rescaled to average 0, spread 1, so numbers stay in a comfortable range.',
     '<strong>Think alone</strong>: expand, keep the positives (ReLU), squeeze back — then add back and normalise once more. That is one whole transformer block.',
-  ]), chapterNav('ffn.html'));
+  ]), checkYourself('ffn.html'), chapterNav('ffn.html'));
 }
 
 bindRender(render, { quietKeys: ['view'] });

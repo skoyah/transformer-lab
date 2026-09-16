@@ -72,7 +72,7 @@ function heroPanel() {
       ]),
     ]),
     prose(`<p>A phone keyboard does this when it suggests your next word; a chatbot does it in a loop, one piece at a time. The machine behind it is a <strong>transformer</strong>, and this book walks through a real, tiny one: every number is on screen, and you press play to watch each step happen.</p>
-      <p>The model has only one kind of memory: its <strong>weights</strong> — a few hundred numbers, in a handful of tables, that training is allowed to change. Everything else you will see is worked out from them and from your text. A chatbot's weights number in the billions; the tables are just bigger.</p>`),
+      <p>The model has only one kind of memory: its <strong>weights</strong> — a few thousand numbers, in a handful of tables, that training is allowed to change. Everything else you will see is worked out from them and from your text. A chatbot's weights number in the billions; the tables are just bigger.</p>`),
     el('div', { class: 'start-row' }, [
       el('button', { class: 'primary big', text: s.currentStep && s.currentStep !== 'index.html' ? 'Continue reading →' : 'Start Chapter 1 →', onclick: () => { location.href = s.currentStep && s.currentStep !== 'index.html' ? s.currentStep : 'tokens.html'; } }),
       el('span', { class: 'fig-caption', style: 'margin:0', text: 'Six short chapters, about an hour. Nothing is computed until you press play.' }),
