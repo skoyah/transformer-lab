@@ -132,20 +132,7 @@ export function lookupScene({ table, ids, tokens, output, idle, explain, done })
 
 // Sentence → tokens, one token per step. The reading head scans the token's
 // letters one by one (lower-casing them), then the token flies into its chip.
-export function tokenizeScene({ sentence, tokens, idle, win = null }) {
-  const lower = sentence.toLowerCase();
-  const spans = [];
-  let cursor = 0;
-  for (const t of tokens) {
-    // ▁ (word start) is not in the text: match the rest, skipping whitespace; a lone ▁ is a space.
-    const bare = t.replace(/^▁/, '');
-    let at;
-    if (bare === '') { at = lower.indexOf(' ', cursor); if (at < 0) at = cursor; spans.push([at, at + 1]); cursor = at + 1; continue; }
-    at = lower.indexOf(bare, cursor);
-    if (at < 0) at = cursor;
-    spans.push([at, at + bare.length]);
-    cursor = at + bare.length;
-  }
+export function tokenizeScene({ sentence, tokens, spans, idle, win = null }) {
   // With a lens, only the window's tokens are stepped; earlier ones show as already seen.
   const first = win ? win.start : 0;
   const n = win ? win.size : tokens.length;
@@ -157,15 +144,12 @@ export function tokenizeScene({ sentence, tokens, idle, win = null }) {
       let pos = 0;
       spans.forEach(([a, b], i) => {
         if (a > pos) pieces.push(el('span', { class: 'gap', text: sentence.slice(pos, a) }));
+        if (b <= a) { pos = Math.max(pos, a); return; } // a lone ▁ token covers no characters
         if (i === cur(k)) {
-          const original = sentence.slice(a, b);
-          pieces.push(el('span', { class: 'cur' }, [...original].map((ch, j) => {
-            const lc = ch.toLowerCase();
-            return el('span', { class: `ch ${ch !== lc ? 'lowercased' : ''}`, style: `--i:${j}`, dataset: { lc } }, ch);
-          })));
+          pieces.push(el('span', { class: 'cur' }, [...sentence.slice(a, b)].map((ch, j) => el('span', { class: 'ch', style: `--i:${j}` }, ch))));
         } else {
           const seen = i < cur(k) || (k === 0 && i < first);
-          pieces.push(el('span', { class: seen ? 'seen' : 'todo', text: seen ? lower.slice(a, b) : sentence.slice(a, b) }));
+          pieces.push(el('span', { class: seen ? 'seen' : 'todo', text: sentence.slice(a, b) }));
         }
         pos = b;
       });
@@ -182,24 +166,23 @@ export function tokenizeScene({ sentence, tokens, idle, win = null }) {
       const g = cur(k);
       const t = tokens[g];
       const bare = t.replace(/^▁/, '');
-      const kind = t.startsWith('▁') ? (bare.length ? 'the start of a word (▁ marks it)' : 'a space') : /^[a-z0-9']+$/.test(t) ? (t.length === 1 ? 'a character' : 'a word') : 'a punctuation mark';
-      const changedCase = sentence.slice(spans[g][0], spans[g][1]) !== bare;
+      const kind = /⟨[0-9A-F]{2}⟩/.test(t) ? 'one byte of a multi-byte character (not a whole letter on its own)'
+        : t === '▁' ? 'just the space in front of a word'
+        : t.startsWith('▁') ? (/^[\p{L}\p{N}']+$/u.test(bare) ? (bare.length === 1 ? 'the first letter of a word (▁ marks the space before it)' : 'the start of a word (▁ marks the space before it)') : 'a punctuation mark')
+        : (bare.length === 1 ? 'a single letter inside a word' : 'a piece inside a word');
       return {
         body,
-        caption: `Token <b>#${g}</b>: “${esc(t)}” — ${kind}${changedCase ? ', lower-cased' : ''}, at position ${g}.` + (k === n ? ` ${doneCaption(`${tokens.length} tokens in total.`)}` : ''),
+        caption: `Token <b>#${g}</b>: “${esc(t)}” — ${kind}, at position ${g}.` + (k === n ? ` ${doneCaption(`${tokens.length} tokens in total.`)}` : ''),
         animate(root, ms) {
-          const cur = root.querySelector('.sentence-scan .cur');
+          const curEl = root.querySelector('.sentence-scan .cur');
           const chip = root.querySelector('.chips .chip.pulse');
           const chars = [...root.querySelectorAll('.sentence-scan .cur .ch')];
           const perChar = Math.max(25, Math.min(110, (ms * 0.32) / Math.max(1, chars.length)));
-          chars.forEach((c, j) => {
-            c.style.animationDelay = `${j * perChar}ms`;
-            if (c.classList.contains('lowercased')) setTimeout(() => { c.textContent = c.dataset.lc; }, j * perChar + perChar * 0.6);
-          });
+          chars.forEach((c, j) => { c.style.animationDelay = `${j * perChar}ms`; });
           const scanMs = chars.length * perChar;
           if (chip) {
             chip.style.visibility = 'hidden';
-            setTimeout(() => flyGhost(root, cur, chip, { duration: Math.max(220, Math.min(600, ms * 0.28)), text: t, className: 'chip-ghost' }), scanMs + 40);
+            setTimeout(() => flyGhost(root, curEl || chip, chip, { duration: Math.max(220, Math.min(600, ms * 0.28)), text: t, className: 'chip-ghost' }), scanMs + 40);
           }
         },
       };

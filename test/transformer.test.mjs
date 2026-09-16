@@ -31,10 +31,11 @@ test('linear algebra basics', () => {
 });
 
 test('tokenize + vocab keeps stable ids', () => {
-  assert.deepEqual(tokenize('The cat, sat.'), ['the', 'cat', ',', 'sat', '.']);
+  assert.deepEqual(tokenize('The cat, sat.').map((t) => t.replace('▁', '')).join(''), 'Thecat,sat.');
   const v1 = extendVocab([], tokenize('the cat sat'));
   const v2 = extendVocab(v1, tokenize('the dog sat'));
-  assert.deepEqual(v2, ['the', 'cat', 'sat', 'dog']);
+  assert.deepEqual(v2.slice(0, v1.length), v1, 'existing pieces keep their ids');
+  assert.ok(v2.length > v1.length && v2.includes('▁dog'));
 });
 
 test('seeded rows are deterministic', () => {
@@ -182,23 +183,23 @@ test('incremental numerical gradient matches a full recompute', async () => {
   assert.ok(maxDiff < 1e-9, `max diff ${maxDiff}`);
 });
 
-test('tokenizers: chars and BPE', async () => {
-  const { tokenizeChars, learnBpe, applyBpe, tokenize, WORD_START } = await import('../js/transformer.js');
-  assert.deepEqual(tokenizeChars('the cat'), ['t', 'h', 'e', WORD_START, 'c', 'a', 't']);
-  const text = 'the cat sat on the mat the cat sat';
-  const { merges, steps, initial } = learnBpe(text, 5);
-  assert.ok(merges.length >= 3);
-  assert.equal(merges[0].count >= merges[1].count, true, 'most frequent pair first');
-  assert.ok(initial[0].join('') === WORD_START + 'the');
-  assert.equal(steps.length, merges.length);
-  const toks = applyBpe(text, merges);
-  assert.ok(toks.length < tokenizeChars(text).length, 'merges shorten the sequence');
+test('byte-level BPE: case kept, any character representable, deterministic', async () => {
+  const { learnBpe, applyBpe, tokenize, tokenSpans, WORD_START } = await import('../js/transformer.js');
+  const text = 'the cat sat on the mat the cat sat The cat';
+  const learned = learnBpe(text, 5);
+  assert.ok(learned.merges.length >= 3);
+  assert.ok(learned.merges.every((m, i) => i === 0 || m.count <= learned.merges[i - 1].count), 'most frequent pair first');
+  assert.equal(learned.initial[0].join(''), WORD_START + 'the');
+  const toks = applyBpe(text, learned);
   assert.equal(toks.join('').replace(new RegExp(WORD_START, 'g'), ''), text.replace(/ /g, ''), 'no characters lost');
-  // unseen word still tokenises (falls back to smaller pieces)
-  const novel = tokenize('thematic', { scheme: 'bpe', merges: 5, trainingText: text });
-  assert.equal(novel.join('').replace(new RegExp(WORD_START, 'g'), ''), 'thematic');
-  // learning is deterministic
-  assert.deepEqual(learnBpe(text, 5).merges, merges);
+  assert.notDeepEqual(tokenize('The', { merges: 5, trainingText: text }), tokenize('the', { merges: 5, trainingText: text }), 'case matters');
+  const odd = tokenize('café 🍓', { merges: 5, trainingText: text });
+  assert.ok(odd.some((t) => /⟨[0-9A-F]{2}⟩/.test(t)), 'unseen multi-byte characters become byte tokens');
+  const s = 'café 🍓 ok';
+  const spans = tokenSpans(s, { merges: 5, trainingText: text });
+  assert.equal(spans.length, tokenize(s, { merges: 5, trainingText: text }).length);
+  assert.ok(spans.every(([a, b]) => a >= 0 && b <= s.length && a <= b));
+  assert.deepEqual(learnBpe(text, 5).merges, learned.merges, 'deterministic');
 });
 
 test('backpropagation matches the numerical gradient', async () => {

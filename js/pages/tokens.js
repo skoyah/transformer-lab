@@ -1,5 +1,5 @@
 import { getExperiment, getDerived, setSentence, sentenceProblem } from '../state.js';
-import { bpeFor, tokenize, tokenizerOf, tokenizeWords, tokenizeChars, WORD_START, BPE_PLAYER_STEPS } from '../transformer.js';
+import { bpeFor, tokenize, tokenizerOf, tokenizeWords, tokenSpans, WORD_START, BPE_PLAYER_STEPS } from '../transformer.js';
 import { CORPUS } from '../corpus.js';
 import { initPage, bindRender, el, esc, lesson, prose, callout, underHood, matrixTable, chapterNav, caption, windowOf, sliceRows, lensBar, pieceChips } from '../ui.js';
 import { player, chapterControls } from '../player.js';
@@ -17,17 +17,18 @@ function tokeniseAnything(cut) {
   const show = () => {
     const pieces = cut(input.value);
     const letters = [...input.value.replace(/\s+/g, '')].length;
+    const bytes = new TextEncoder().encode(input.value.replace(/\s+/g, '')).length;
     const wordsN = tokenizeWords(input.value).length;
     out.replaceChildren(
       pieces.length ? pieceChips(pieces) : el('span', { class: 'fig-caption', text: '…' }),
-      el('div', { class: 'stats', text: pieces.length ? `${letters} letters · ${wordsN} word${wordsN === 1 ? '' : 's'} · ${pieces.length} piece${pieces.length === 1 ? '' : 's'} — about ${(letters / Math.max(1, pieces.length)).toFixed(1)} letters per piece. Pieces with the same underline colour belong to the same word.` : '' }),
+      el('div', { class: 'stats', text: pieces.length ? `${letters} characters (${bytes} bytes) · ${wordsN} word${wordsN === 1 ? '' : 's'} · ${pieces.length} piece${pieces.length === 1 ? '' : 's'} — about ${(letters / Math.max(1, pieces.length)).toFixed(1)} characters per piece. Pieces with the same underline colour belong to the same word.` : '' }),
     );
   };
   input.addEventListener('input', () => { anyText = input.value; show(); });
   show();
   return el('div', { class: 'card' }, [
     el('strong', { style: 'font: 600 14px/1.3 var(--sans)', text: 'Tokenise anything' }),
-    el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .7rem', text: 'Common words stay whole; rare or foreign words fall into fragments; a made-up word still gets pieces. (This box only shows pieces — it does not change the model.)' }),
+    el('p', { class: 'fig-caption', style: 'margin:.2rem 0 .7rem', text: 'Common words stay whole; rare or foreign words fall into fragments; a made-up word still gets pieces; an accented letter or an emoji becomes its bytes (⟨C3⟩⟨A3⟩ is “ã”). Try “Hello” and “hello”. (This box only shows pieces — it does not change the model.)' }),
     el('div', { class: 'tok-any' }, [input]),
     out,
   ]);
@@ -49,7 +50,7 @@ function render() {
   const bpe = bpeFor(CORPUS, tok.merges);
   const corpusWords = tokenizeWords(CORPUS).length;
   const words = tokenizeWords(s.sentence);
-  const chars = tokenizeChars(s.sentence).length;
+  const chars = [...s.sentence.replace(/\s+/g, '')].length;
   const cut = (text) => tokenize(text, tok);
 
   const textarea = el('textarea', { text: s.sentence, 'aria-label': 'Training text' });
@@ -72,21 +73,21 @@ function render() {
   const pieces = lesson('Step one: cut it into pieces', [
     prose(`<p>The model doesn't work with a sentence, it works with a list of <strong>tokens</strong>. The obvious choice — one token per word — has two problems. A word the model has never seen is a dead end: there is no row for it. And the dictionary grows without bound, because every spelling, every name and every typo needs its own entry. Cutting into single letters fixes both, but then a sentence becomes a very long list and the model has to relearn what “cat” is from c, a, t every time.</p>
       <p>So real models cut text into <strong>pieces</strong> that range from a single character up to a whole common word: “tokenization” might become “token” + “ization”; a rare name becomes a handful of fragments; “the” stays one piece. Nothing is a dead end, because in the worst case a word falls apart into characters. This book uses the most common way of deciding the pieces, <strong>byte-pair encoding</strong> (BPE), which is what GPT, Llama and Mistral use.</p>
-      <p>BPE is learned, not designed. Start from single characters. Count which two neighbouring symbols sit next to each other most often, glue them into one new symbol, and repeat. Every merge is learned from a body of text — a real tokenizer's from billions of words, this book's from a small corpus of ${corpusWords} words of plain English that ships with it. The merges are learned once and then frozen; your sentence is cut with them, it does not change them. (The name comes from an older compression trick on bytes; GPT-style tokenizers literally start from the 256 possible bytes, so that any text at all can be tokenised. Ours starts from characters and, like the original recipe, merges only inside words.)</p>`),
+      <p>BPE is learned, not designed. Start from the smallest units — not letters but the <strong>256 possible bytes</strong>, so that any character in any language, and any emoji, can be represented (a letter like “ã” is two bytes, “🍓” is four). Count which two neighbouring symbols sit next to each other most often, glue them into one new symbol, and repeat. Every merge is learned from a body of text — a real tokenizer's from billions of words, this book's from a small corpus of ${corpusWords} words of plain English that ships with it. The merges are learned once and then frozen; your sentence is cut with them, it does not change them. Case is kept: “Hello” and “hello” start as different bytes and end as different tokens, exactly as in GPT-style models.</p>`),
     callout('idea', `<p>It is how you learn to read fast. At first you spell out c-a-t; after seeing “cat” a few hundred times, it is one glance. Rare words you still sound out in chunks. BPE does the same by counting.</p>`),
     player({ id: 'bpe', track: false, key: `corpus|${tok.merges}`, scene: bpeScene({
       initial: bpe.initial, merges: bpe.merges, steps: bpe.steps, corpusWords, totalMerges: bpe.merges.length,
-      idle: `Press play to watch the first ${BPE_PLAYER_STEPS} of the ${bpe.merges.length} merges being learned from the corpus. Each step first lights up every place the winning pair occurs, then glues it. ▁ marks the start of a word; “${WORD_START}t” (t starting a word) and “t” (t inside a word) are different symbols.`,
+      idle: `Press play to watch the first ${BPE_PLAYER_STEPS} of the ${bpe.merges.length} merges being learned from the corpus. Each step first lights up every place the winning pair occurs, then glues it. ▁ is the space byte in front of a word, so “${WORD_START}t” (t starting a word) and “t” (t inside a word) are different symbols.`,
     }) }),
-    prose(`<p>With the merges learned, tokenising is mechanical: cut every word into characters and apply the ${bpe.merges.length} merges in order. Your text is ${chars} characters, ${words.length} words, and ${d.tokens.length} tokens. Each token also gets a <strong>position</strong>, 0 for the first, 1 for the second, and so on. Hold on to that; it matters in Chapter 2.</p>`),
-    player({ id: 'tokens', scene: tokenizeScene({ sentence: s.sentence, tokens: d.tokens, win, idle: `Press play to scan the sentence and pull out one token at a time${win.partial ? ` (positions ${win.start}–${win.end - 1}; slide the lens for the rest)` : ''}.` }) }),
+    prose(`<p>With the merges learned, tokenising is mechanical: cut every word into bytes and apply the ${bpe.merges.length} merges in order. Your text is ${chars} characters, ${words.length} words, and ${d.tokens.length} tokens. Each token also gets a <strong>position</strong>, 0 for the first, 1 for the second, and so on. Hold on to that; it matters in Chapter 2.</p>`),
+    player({ id: 'tokens', scene: tokenizeScene({ sentence: s.sentence, tokens: d.tokens, spans: tokenSpans(s.sentence, tok), win, idle: `Press play to scan the sentence and pull out one token at a time${win.partial ? ` (positions ${win.start}–${win.end - 1}; slide the lens for the rest)` : ''}.` }) }),
     tokeniseAnything(cut),
     strawberryCallout(cut),
   ]);
 
   const numbering = lesson('Step two: give every piece a number', [
     prose(`<p>Next the model keeps a <strong>dictionary</strong>: every distinct piece it has ever seen, with a number next to it. Turning the tokens into numbers is then just a lookup.</p>`),
-    callout('idea', `<p>It works like a coat check. Hand over a piece, get a ticket number. Hand over the same piece later and you get the <em>same</em> number — “${esc(s.vocab[0])}” is always ticket 0 in this dictionary, no matter where it appears.</p>`),
+    callout('idea', `<p>It works like a coat check. Hand over a piece, get a ticket number. Hand over the same piece later and you get the <em>same</em> number — “${esc(d.tokens[0])}” is always ticket ${d.tokenIds[0]} in this dictionary, no matter where it appears.</p>`),
     player({ id: 'tokenIds', scene: idScene({ tokens: sliceRows(d.tokens, win), ids: sliceRows(d.tokenIds, win), vocab: s.vocab, offset: win.start, idle: 'Press play to look each token up in the dictionary.' }) }),
     caption('Highlighted dictionary rows are pieces in your current text. Pieces from earlier texts keep their tickets.'),
     callout('try', `<ul>
@@ -99,7 +100,7 @@ function render() {
     ]),
     callout('key', `<p>A token is whatever the tokenizer says it is — often a word, sometimes a fragment, occasionally a single character. Ticket numbers carry no meaning: “cat” being 1 and “sat” being 2 does not make them similar. Meaning is added in the next chapter, and it is learned. Real vocabularies hold from about 30,000 pieces (BERT) through 50,257 (GPT-2) and 128,000 (Llama 3) to 256,000 (Gemma), learned once from a huge corpus and then frozen.</p>`),
     underHood('merges = learnBpe(text, 50)   tokens = applyBpe(text, merges)   ids = tokens.map(t => vocab.indexOf(t))',
-      `<p>Byte-pair encoding: Sennrich, Haddow &amp; Birch (2016). Other subword families exist — WordPiece (BERT) and Unigram (T5) — and solve the same problem. The vocabulary only ever grows: a new piece is appended, existing IDs are never renumbered, so every piece's row in the embedding table (next chapter) stays put.</p>`),
+      `<p>Byte-pair encoding: Sennrich, Haddow &amp; Birch (2016); the byte-level variant with a leading-space convention is GPT-2's (Radford et al. 2019). Other subword families exist — WordPiece (BERT) and Unigram (T5) — and solve the same problem. The vocabulary only ever grows: a new piece is appended, existing IDs are never renumbered, so every piece's row in the embedding table (next chapter) stays put.</p>`),
   ]);
 
   content.replaceChildren(chapterControls(STAGES_HERE), lensBar(d.tokens.length), intro, pieces, numbering, chapterNav('tokens.html'));

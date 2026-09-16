@@ -1,5 +1,7 @@
 // js/transformer.js
 // Pure mathematics + the dependency graph of the educational pipeline.
+import { CORPUS } from './corpus.js';
+export const BPE_MERGES = 300;
 // No DOM, no storage. Everything here is a deterministic function of the
 // persistent experiment state (see state.js).
 
@@ -168,36 +170,53 @@ export function argmax(row) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Tokenizers. Three schemes, chosen in state.config.tokenizer:
-//   words — lower-cased words, punctuation on its own (the simple default)
-//   chars — one token per character; a space becomes ▁
-//   bpe   — subwords: start from characters, repeatedly merge the most
-//           frequent adjacent pair (learned from the training text itself)
-// ▁ marks the start of a word in the chars/bpe schemes, as in SentencePiece.
+// Tokenizer: byte-level byte-pair encoding, the way GPT-style models do it.
+//   • pre-tokenise into words and punctuation, keeping case ("Hello" ≠ "hello")
+//   • every word is prefixed with a space byte (its "▁"), then split into its
+//     UTF-8 bytes — so any character in any language is representable
+//   • merges glue the most frequent neighbouring pair, learned once from a corpus
+// Internally a symbol is a string whose char codes are bytes (0–255). Tokens
+// handed to the rest of the book are display strings: ▁ for the leading
+// space, decoded text for valid UTF-8, and ⟨C3⟩-style escapes for a lone byte
+// of a multi-byte character.
 // ---------------------------------------------------------------------------
 
-export const TOKENIZERS = ['words', 'chars', 'bpe'];
 export const WORD_START = '▁';
+const utf8 = new TextEncoder();
+const utf8dec = new TextDecoder('utf-8', { fatal: true });
 
+// Words and punctuation, case preserved, any script.
 export function tokenizeWords(sentence) {
-  return (sentence || '').toLowerCase().match(/[a-z0-9']+|[^\sa-z0-9']/g) || [];
+  return (sentence || '').match(/[\p{L}\p{N}']+|[^\s\p{L}\p{N}']/gu) || [];
 }
 
+// Kept for the letter count in Chapter 1.
 export function tokenizeChars(sentence) {
-  const text = (sentence || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  return [...text].map((c) => (c === ' ' ? WORD_START : c));
+  return [...(sentence || '').replace(/\s+/g, ' ').trim()].map((c) => (c === ' ' ? WORD_START : c));
 }
 
-// Each word as a list of symbols, first symbol carrying the ▁ marker.
+const byteSyms = (str) => [...utf8.encode(str)].map((b) => String.fromCharCode(b));
+
+// Each word as a list of byte symbols, led by the space byte.
 function wordSymbols(sentence) {
-  return tokenizeWords(sentence).map((w) => [...w].map((c, i) => (i === 0 ? WORD_START + c : c)));
+  return tokenizeWords(sentence).map((w) => byteSyms(' ' + w));
+}
+
+// Display form of a byte symbol.
+export function displayPiece(sym) {
+  const bytes = Uint8Array.from([...sym].map((c) => c.charCodeAt(0)));
+  let text;
+  try { text = utf8dec.decode(bytes); } catch { text = null; }
+  if (text != null) return text.startsWith(' ') ? WORD_START + text.slice(1) : text;
+  // not a whole character: show bytes, ASCII ones as themselves
+  return [...bytes].map((b, i) => (b === 0x20 && i === 0 ? WORD_START : b >= 0x21 && b <= 0x7e ? String.fromCharCode(b) : `⟨${b.toString(16).toUpperCase().padStart(2, '0')}⟩`)).join('');
 }
 
 function pairCounts(words) {
   const counts = new Map();
   for (const syms of words) {
     for (let i = 0; i + 1 < syms.length; i++) {
-      const key = syms[i] + '\u0000' + syms[i + 1];
+      const key = syms[i] + '\u0100' + syms[i + 1]; // U+0100 is outside the byte range, so it cannot occur in a symbol
       counts.set(key, (counts.get(key) || 0) + 1);
     }
   }
@@ -216,15 +235,16 @@ function mergePair(words, a, b) {
 }
 
 // Learn up to `numMerges` merges from the text. Returns
-// { merges: [{ a, b, result, count, top }], steps: [words after each merge], initial }.
-// Deterministic: ties broken alphabetically. Stops when no pair occurs twice.
-// `keepSteps` bounds how many intermediate states are stored (the player only
-// shows the first few dozen merges; a corpus-sized history would be heavy).
+// { merges: [{ a, b, result, count, top }], steps: [words after each merge], initial }
+// with a, b, result and the words as display strings. Deterministic: ties
+// broken by byte order. Stops when no pair occurs twice. `keepSteps` bounds how
+// many intermediate states are stored (the player shows the first few dozen).
 export function learnBpe(sentence, numMerges, { keepSteps = Infinity, sampleWords = Infinity } = {}) {
   let words = wordSymbols(sentence);
-  const snapshot = (ws) => ws.slice(0, sampleWords).map((w) => w.slice());
+  const snapshot = (ws) => ws.slice(0, sampleWords).map((w) => w.map(displayPiece));
   const initial = snapshot(words);
   const merges = [];
+  const raw = [];
   const steps = [];
   for (let m = 0; m < numMerges; m++) {
     const counts = pairCounts(words);
@@ -234,21 +254,55 @@ export function learnBpe(sentence, numMerges, { keepSteps = Infinity, sampleWord
       if (!best || count > best.count || (count === best.count && key < best.key)) best = { key, count };
     }
     if (!best) break;
-    const [a, b] = best.key.split('\u0000');
+    const [a, b] = best.key.split('\u0100');
     words = mergePair(words, a, b);
+    raw.push([a, b]);
     const keep = merges.length < keepSteps;
-    merges.push({ a, b, result: a + b, count: best.count,
-      top: keep ? [...counts].filter(([, c]) => c >= 2).sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, 6).map(([k, c]) => ({ pair: k.split('\u0000'), count: c })) : null });
+    merges.push({ a: displayPiece(a), b: displayPiece(b), result: displayPiece(a + b), count: best.count,
+      top: keep ? [...counts].filter(([, c]) => c >= 2).sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1)).slice(0, 6).map(([k, c]) => ({ pair: k.split('\u0100').map(displayPiece), count: c })) : null });
     if (keep) steps.push(snapshot(words));
   }
-  return { merges, steps, initial };
+  return { merges, raw, steps, initial };
 }
 
-// Apply learned merges, in order, to any text (prompts use the training text's merges).
-export function applyBpe(sentence, merges) {
+// Apply learned merges (raw byte pairs), in order, to any text.
+export function applyBpeRaw(sentence, raw) {
   let words = wordSymbols(sentence);
-  for (const { a, b } of merges) words = mergePair(words, a, b);
-  return words.flat();
+  for (const [a, b] of raw) words = mergePair(words, a, b);
+  return words;
+}
+
+export function applyBpe(sentence, learned) {
+  return applyBpeRaw(sentence, learned.raw || []).flat().map(displayPiece);
+}
+
+// Character span [start, end) in `sentence` (string indices) covered by each
+// token, for the reading-head animation. A token that ends inside a
+// multi-byte character highlights that whole character; a token that is only
+// the word's leading space gets an empty span at the word start.
+export function tokenSpans(sentence, tokenizer) {
+  const words = applyBpeRaw(sentence, bpeFor(tokenizer.trainingText, tokenizer.merges).raw);
+  const re = /[\p{L}\p{N}']+|[^\s\p{L}\p{N}']/gu;
+  const spans = [];
+  let m, wi = 0;
+  while ((m = re.exec(sentence)) && wi < words.length) {
+    const wordStart = m.index, chars = [...m[0]];
+    const charAtByte = [];           // byte index within the word → char index
+    const unitAtChar = [0];          // char index → string (UTF-16) offset within the word
+    chars.forEach((ch, ci) => { for (let k = 0; k < utf8.encode(ch).length; k++) charAtByte.push(ci); unitAtChar.push(unitAtChar[ci] + ch.length); });
+    let pos = -1;                    // byte cursor; −1 is the leading space byte
+    for (const sym of words[wi]) {
+      const L = sym.length;
+      const firstByte = Math.max(pos, 0), lastByte = pos + L - 1;
+      if (lastByte < 0) { spans.push([wordStart, wordStart]); pos += L; continue; }
+      const from = charAtByte[firstByte] ?? chars.length - 1;
+      const to = (charAtByte[Math.min(lastByte, charAtByte.length - 1)] ?? chars.length - 1) + 1;
+      spans.push([wordStart + unitAtChar[from], wordStart + unitAtChar[to]]);
+      pos += L;
+    }
+    wi++;
+  }
+  return spans;
 }
 
 const bpeCache = new Map();
@@ -263,19 +317,15 @@ export function bpeFor(trainingText, numMerges) {
   return bpeCache.get(key);
 }
 
-// tokenizer: { scheme, merges, trainingText } — trainingText is what BPE learns from.
+// tokenizer: { merges, trainingText }
 export function tokenize(sentence, tokenizer = null) {
-  const scheme = tokenizer && tokenizer.scheme ? tokenizer.scheme : 'words';
-  if (scheme === 'chars') return tokenizeChars(sentence);
-  if (scheme === 'bpe') return applyBpe(sentence, bpeFor(tokenizer.trainingText ?? sentence, tokenizer.merges ?? 20).merges);
-  return tokenizeWords(sentence);
+  const t = tokenizer || { merges: BPE_MERGES, trainingText: CORPUS };
+  return applyBpe(sentence, bpeFor(t.trainingText, t.merges));
 }
 
 // The tokenizer a state implies: BPE with merges learned once from the corpus.
-import { CORPUS } from './corpus.js';
-export const BPE_MERGES = 300;
 export function tokenizerOf(state) {
-  return { scheme: 'bpe', merges: (state.config && state.config.merges) || BPE_MERGES, trainingText: CORPUS };
+  return { merges: (state.config && state.config.merges) || BPE_MERGES, trainingText: CORPUS };
 }
 
 // Existing vocabulary entries keep their IDs; unseen tokens are appended.

@@ -19,7 +19,7 @@ export const DEFAULTS = {
   hidden: 8,
   learningRate: 0.1,
   causal: true,
-  tokenizer: 'bpe',   // the one tokenizer in the book: byte-pair-encoding subwords learned from the corpus
+  tokenizer: 'bpe-bytes',   // the one tokenizer in the book: byte-level BPE, merges learned from the corpus
   merges: 300,
 };
 
@@ -138,9 +138,9 @@ setTimeout(() => { lastCommitted = experimentOnly(); }, 0);
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
 if (!state.progress) state.progress = {};
 if (!state.view) state.view = { start: 0, size: 12 };
-// Older saves used whole words, or merges learned from the sentence: re-tokenise with the corpus merges.
-if (state.config.tokenizer !== 'bpe' || state.config.merges !== 300) {
-  state.config.tokenizer = 'bpe';
+// Older saves used whole words, sentence-learned merges, or character-level BPE: re-tokenise.
+if (state.config.tokenizer !== 'bpe-bytes' || state.config.merges !== 300) {
+  state.config.tokenizer = 'bpe-bytes';
   state.config.merges = 300;
   const tokens = tokenize(state.sentence, tokenizerOf(state));
   state.vocab = extendVocab(state.vocab, tokens);
