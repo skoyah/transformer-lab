@@ -174,6 +174,9 @@ if (state.tokenIds.length > MAX_TOKENS) {
   state.notice = `Your text had more than ${MAX_TOKENS} tokens, so it was shortened to the first ${MAX_TOKENS}.`;
   writeStorage(state);
 }
+// A notice from an earlier version (e.g. the old 40-token cap) no longer applies.
+if (state.notice && !state.notice.includes(`${MAX_TOKENS}`)) delete state.notice;
+
 // Whatever was stored, every vocab entry and position must have its rows.
 if (ensureCapacity(state).length) writeStorage(state);
 if (!state.animation || !state.animation.speed) state.animation = { speed: 'normal' };

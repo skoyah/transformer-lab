@@ -23,6 +23,8 @@ const STAGE_WHAT = {
   logits: 'score every piece in the dictionary', probs: 'turn scores into a bet', prediction: 'pick the favourite',
 };
 
+const isByte = (piece) => /⟨[0-9A-F]{2}⟩/.test(piece);
+
 function heroPanel() {
   const s = getExperiment();
   const d = getDerived();
@@ -59,16 +61,17 @@ function heroPanel() {
       ]),
       el('div', { class: 'card demo' }, [
         el('h3', { style: 'margin-top:0', text: 'What the model does' }),
-        el('p', { class: 'fig-caption', style: 'margin:0 0 .5rem', text: `After “${d.tokens[last]}”, its three best bets for the next piece:` }),
-        el('div', { class: 'keyboard' }, top.map((t, i) => el('span', { class: `key ${i === 0 ? 'best' : ''}` }, [s.vocab[t.id], el('small', { text: pct(t.p) })]))),
-        el('p', { class: 'fig-caption', style: 'margin:.7rem 0 .3rem', text: 'Left to write on its own, it continues:' }),
+        el('p', { class: 'fig-caption', style: 'margin:0 0 .5rem', text: `Your text ends with “${d.tokens[last]}”. Its three best bets for what comes next:` }),
+        el('div', { class: 'keyboard' }, top.map((t, i) => el('span', { class: `key ${i === 0 ? 'best' : ''}`, title: isByte(s.vocab[t.id]) ? 'a raw byte — not even a letter' : '' }, [s.vocab[t.id], el('small', { text: pct(t.p) })]))),
+        el('p', { class: 'fig-caption', style: 'margin:.7rem 0 .3rem', text: 'Left to keep writing after the last words of your text, it adds:' }),
         el('div', { class: 'chips' }, [
-          ...s.tokenIds.slice(Math.max(0, last - 3), last + 1).map((id) => el('span', { class: 'chip prompt', text: s.vocab[id] })),
+          ...s.tokenIds.slice(Math.max(0, last - 3), last + 1).map((id) => el('span', { class: 'chip prompt', title: 'the end of your text', text: s.vocab[id] })),
+          el('span', { class: 'op', style: 'font-size:1.1rem', text: '→' }),
           ...written.map((g) => el('span', { class: 'chip gen', style: `--conf:${g.prob.toFixed(2)}` }, [g.token, el('small', { text: pct(g.prob) })])),
         ]),
         el('p', { class: 'fig-caption', style: 'margin:.7rem 0 0', text: steps
-          ? `That is the whole game: bet on the next piece. Its surprise on your text is ${fmt(loss, 2)} — it is hesitating between about ${eff < 10 ? eff.toFixed(1) : Math.round(eff)} of the ${V} pieces it knows.`
-          : `That is the whole game: bet on the next piece. Untrained, it is guessing — hesitating between about ${Math.round(eff)} of the ${V} pieces it knows. By Chapter 5 you will have trained it; by Chapter 6 it runs as a phone-keyboard autocomplete.` }),
+          ? `That is the whole game: bet on the next piece. Its surprise on your text is ${fmt(loss, 2)} — as if it were hesitating between ${eff < 10 ? eff.toFixed(1) : Math.round(eff)} equally likely pieces out of the ${V} it knows.`
+          : `That is the whole game: bet on the next piece. Untrained, it has no idea: every one of its ${V} pieces looks about equally likely (1% each), so its “best bets” are random — some are raw bytes like ⟨B1⟩ that never form a word. By Chapter 5 you will have trained it; by Chapter 6 it runs as a phone-keyboard autocomplete.` }),
       ]),
     ]),
     prose(`<p>A phone keyboard does this when it suggests your next word; a chatbot does it in a loop, one piece at a time. The machine behind it is a <strong>transformer</strong>, and this book walks through a real, tiny one: every number is on screen, and you press play to watch each step happen.</p>
