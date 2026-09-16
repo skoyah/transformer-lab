@@ -317,6 +317,20 @@ export function bpeFor(trainingText, numMerges) {
   return bpeCache.get(key);
 }
 
+// The tokenizer's whole vocabulary: the 256 single bytes, then one symbol
+// per learned merge, in merge order (GPT-2's layout). Fixed before training;
+// every piece the tokenizer can produce has an id, used or not.
+const vocabCache = new Map();
+export function tokenizerVocab(tokenizer = null) {
+  const t = tokenizer || { merges: BPE_MERGES, trainingText: CORPUS };
+  const learned = bpeFor(t.trainingText, t.merges);
+  if (!vocabCache.has(learned)) {
+    const bytes = Array.from({ length: 256 }, (_, b) => displayPiece(String.fromCharCode(b)));
+    vocabCache.set(learned, [...bytes, ...learned.merges.map((m) => m.result)]);
+  }
+  return vocabCache.get(learned);
+}
+
 // tokenizer: { merges, trainingText }
 export function tokenize(sentence, tokenizer = null) {
   const t = tokenizer || { merges: BPE_MERGES, trainingText: CORPUS };
@@ -335,8 +349,11 @@ export function extendVocab(vocab, tokens) {
   return out;
 }
 
+const idIndex = new WeakMap();
 export function tokensToIds(tokens, vocab) {
-  return tokens.map((t) => vocab.indexOf(t));
+  if (!idIndex.has(vocab)) idIndex.set(vocab, new Map(vocab.map((t, i) => [t, i])));
+  const index = idIndex.get(vocab);
+  return tokens.map((t) => { const id = index.get(t); return id == null ? vocab.indexOf(t) : id; });
 }
 
 export function sinusoidalPosition(pos, dim) {

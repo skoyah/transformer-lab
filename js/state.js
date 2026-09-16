@@ -5,7 +5,7 @@
 
 import {
   STAGE_IDS, TRAINABLE, affectedStages, forward, trainStep as computeTrainStep,
-  tokenize, tokenizeWords, tokenizerOf, extendVocab, tokensToIds, seededMatrix, seededRow, sinusoidalPosition,
+  tokenize, tokenizeWords, tokenizerOf, tokenizerVocab, extendVocab, tokensToIds, seededMatrix, seededRow, sinusoidalPosition,
   sinusoidalPositions, zeros,
 } from './transformer.js';
 
@@ -13,7 +13,7 @@ export const STORAGE_KEY = 'transformer-lab:experiment:v1';
 export const VERSION = 1;
 
 export const DEFAULTS = {
-  sentence: 'the cat sat on the mat',
+  sentence: 'the cat sat by the door',
   seed: 42,
   dim: 4,
   hidden: 8,
@@ -60,8 +60,9 @@ function initWeights({ seed, dim, hidden, vocabSize, positions }) {
 
 export function createExperiment(overrides = {}) {
   const opts = { ...DEFAULTS, ...overrides };
-  const tokens = tokenize(opts.sentence, tokenizerOf({ config: { merges: opts.merges }, sentence: opts.sentence }));
-  const vocab = extendVocab([], tokens);
+  const tokenizer = tokenizerOf({ config: { merges: opts.merges }, sentence: opts.sentence });
+  const tokens = tokenize(opts.sentence, tokenizer);
+  const vocab = tokenizerVocab(tokenizer);   // fixed: every piece the tokenizer can produce
   const tokenIds = tokensToIds(tokens, vocab);
   return {
     version: VERSION,
@@ -138,16 +139,29 @@ setTimeout(() => { lastCommitted = experimentOnly(); }, 0);
 if (!state.playground) state.playground = { prompt: 'the cat', steps: 4, temperature: 0 };
 if (!state.progress) state.progress = {};
 if (!state.view) state.view = { start: 0, size: 12 };
-// Older saves used whole words, sentence-learned merges, or character-level BPE: re-tokenise.
-if (state.config.tokenizer !== 'bpe-bytes' || state.config.merges !== 300) {
-  state.config.tokenizer = 'bpe-bytes';
-  state.config.merges = 300;
-  const tokens = tokenize(state.sentence, tokenizerOf(state));
-  state.vocab = extendVocab(state.vocab, tokens);
-  state.tokenIds = tokensToIds(tokens, state.vocab);
-  state.progress = {};
-  writeStorage(state);
+// The dictionary is the tokenizer's fixed vocabulary. Older saves (a growing
+// dictionary, other tokenizers) are moved onto it; rows of pieces that already
+// existed keep their trained values, the rest are seeded as usual.
+export function normaliseVocab(target) {
+  const full = tokenizerVocab(tokenizerOf(target));
+  const same = target.vocab.length === full.length && target.vocab.every((t, i) => t === full[i]);
+  if (!same) {
+    const oldIndex = new Map(target.vocab.map((t, i) => [t, i]));
+    const remap = (name, scale) => full.map((piece, i) => {
+      const old = oldIndex.get(piece);
+      return old != null && target.weights[name][old] ? target.weights[name][old].slice() : seededRow(target.seed, name, i, target.config.dim, scale);
+    });
+    target.weights.embedding = remap('embedding', 0.5);
+    target.weights.Wout = remap('Wout', 0.5);
+    target.vocab = full;
+  }
+  target.config.tokenizer = 'bpe-bytes';
+  target.config.merges = 300;
+  const tokens = tokenize(target.sentence, tokenizerOf(target));
+  target.tokenIds = tokensToIds(tokens, target.vocab);
+  return !same;
 }
+if (normaliseVocab(state)) { state.progress = {}; writeStorage(state); }
 // Texts saved before the token cap existed: shorten them once, and say so.
 if (state.tokenIds.length > MAX_TOKENS) {
   const kept = tokenizeWords(state.sentence).slice(0, MAX_TOKENS);
@@ -284,21 +298,14 @@ export function setSentence(text) {
   if (tokens.length === 0 || tokens.length > MAX_TOKENS) return null;
   state.sentence = sentence;
   delete state.notice;
-  state.vocab = extendVocab(state.vocab, tokens);
   state.tokenIds = tokensToIds(tokens, state.vocab);
   const grown = ensureCapacity(state);
-  return commit(['sentence', 'vocab', 'tokenIds', ...grown]);
+  return commit(['sentence', 'tokenIds', ...grown]);
 }
 
 // Teach the model new words without changing the training text: they get a
 // deterministic random embedding and Wout row, exactly like sentence edits.
-export function addWords(words) {
-  const before = state.vocab.length;
-  state.vocab = extendVocab(state.vocab, words);
-  if (state.vocab.length === before) return null;
-  const grown = ensureCapacity(state);
-  return commit(['vocab', ...grown]);
-}
+export function addWords() { return null; } // the dictionary is fixed; every piece already has a row
 
 export function setWeightCell(name, row, col, value) {
   const v = Number(value);
@@ -350,20 +357,6 @@ export function setModelConfig({ seed, dim, hidden }) {
   state.trainingHistory = [];
   state.handEdited = false;
   return commit([...changed, 'weights'], { reinitialised: true });
-}
-
-// Switching tokenizer re-tokenises the text; vocab keeps growing, never renumbers.
-export function setTokenizer({ scheme, merges }) {
-  const next = { scheme: scheme ?? state.config.tokenizer ?? 'words', merges: merges ?? state.config.merges ?? 20 };
-  if (next.scheme === (state.config.tokenizer ?? 'words') && next.merges === (state.config.merges ?? 20)) return null;
-  state.config.tokenizer = next.scheme;
-  state.config.merges = next.merges;
-  const tokens = tokenize(state.sentence, tokenizerOf(state));
-  if (tokens.length > MAX_TOKENS) { state.config.tokenizer = 'words'; return null; }
-  state.vocab = extendVocab(state.vocab, tokens);
-  state.tokenIds = tokensToIds(tokens, state.vocab);
-  const grown = ensureCapacity(state);
-  return commit(['config.tokenizer', 'config.merges', 'vocab', 'tokenIds', ...grown]);
 }
 
 export function setCausal(flag) {
@@ -501,6 +494,7 @@ export function resetExperiment(overrides = {}) {
 // derived from (seed, config, vocab), so it is never stored.
 // Tokenise any text (a prompt) the way the current model tokenises its own.
 export function tokenizeLike(text) { return tokenize(text, tokenizerOf(state)); }
+export function usedIds() { return [...new Set(state.tokenIds)].sort((a, b) => a - b); }
 
 export function untrainedExperiment() {
   return {
@@ -541,6 +535,7 @@ export function loadSnapshot(id) {
   const snap = state.snapshots.find((s) => s.id === id);
   if (!snap) return null;
   Object.assign(state, JSON.parse(JSON.stringify(snap.experiment)));
+  normaliseVocab(state);
   ensureCapacity(state);
   return commit(['*'], { snapshot: snap });
 }
@@ -615,6 +610,7 @@ export async function decodeShared(hash) {
 export function loadShared(parsed) {
   const exp = parsed.experiment;
   Object.assign(state, JSON.parse(JSON.stringify({ trainingHistory: [], ...exp })));
+  normaliseVocab(state);
   ensureCapacity(state);
   return commit(['*'], { shared: true });
 }

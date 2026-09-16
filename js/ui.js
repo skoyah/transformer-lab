@@ -240,8 +240,12 @@ export function matrixTable(opts) {
     decimals = 2, highlightRows = null, dimRows = null, cornerLabel = '', note = null, small = false,
     filled = null, hlRow = null, hlCol = null, hlCell = null, pulse = null,
     compare = null, // same-shaped matrix (e.g. the untrained model's): cells show how they moved
+    rows: rowSubset = null, // original row indices to display (labels, highlights, edits keep original indices)
+    shapeNote = null,
   } = opts;
-  const rows = Array.isArray(matrix[0]) ? matrix : [matrix];
+  const allRows = Array.isArray(matrix[0]) ? matrix : [matrix];
+  const shown = rowSubset || allRows.map((_, i) => i);
+  const rows = shown.map((i) => allRows[i]);
   let maxAbs = 0;
   for (const row of rows) for (const v of row) if (Number.isFinite(v)) maxAbs = Math.max(maxAbs, Math.abs(v));
 
@@ -253,7 +257,8 @@ export function matrixTable(opts) {
     ])));
   }
   const tbody = el('tbody');
-  rows.forEach((row, r) => {
+  rows.forEach((row, di) => {
+    const r = shown[di]; // original index
     const cls = [highlightRows && highlightRows.has(r) ? 'hl' : '', dimRows && dimRows.has(r) ? 'dim' : '', hlRow === r ? 'hlrow' : ''].join(' ');
     const tr = el('tr', { class: cls });
     if (rowLabels || colLabels) tr.append(el('th', { text: rowLabels ? rowLabels[r] : '' }));
@@ -304,7 +309,7 @@ export function matrixTable(opts) {
   const wrap = el('figure', { class: 'matrix-wrap' });
   if (title) wrap.append(el('figcaption', {}, [
     el('span', { class: 'mtitle', text: title }),
-    el('span', { class: 'shape', text: shapeOf(rows) }),
+    el('span', { class: 'shape', text: shapeNote || (rowSubset ? `${allRows.length} × ${allRows[0].length}, showing ${rows.length} rows` : shapeOf(rows)) }),
     editable ? el('span', { class: 'badge', text: 'editable · saved' }) : null,
   ]));
   wrap.append(el('div', { class: 'scroll' }, table));

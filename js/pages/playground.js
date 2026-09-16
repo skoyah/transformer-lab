@@ -1,5 +1,5 @@
 import { tokenize, forwardIds, generate, topK, lossOf, trainStep } from '../transformer.js';
-import { getExperiment, getDerived, untrainedExperiment, setPlayground, addWords, trainMany, tokenizeLike, MAX_PROMPT_TOKENS } from '../state.js';
+import { getExperiment, getDerived, untrainedExperiment, setPlayground, trainMany, tokenizeLike, MAX_PROMPT_TOKENS } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, chapterNav, matrixTable, attentionArcs } from '../ui.js';
 import { player, groupControls } from '../player.js';
 import { worked } from '../scenes.js';
@@ -50,7 +50,7 @@ const tempInput = el('input', { type: 'range', min: 0, max: 2, step: 0.1, 'aria-
   oninput: (e) => { setPlayground({ temperature: Number(e.target.value) }); scheduleRender(); } });
 
 function promptIds(s, words) {
-  return words.filter((w) => s.vocab.includes(w)).map((w) => s.vocab.indexOf(w));
+  return words.map((w) => s.vocab.indexOf(w)).filter((id) => id >= 0);
 }
 
 // Where the prompt occurs in the training text, the words that follow it
@@ -153,7 +153,8 @@ function render() {
   const fresh = untrainedExperiment();
   const words = tokenizeLike(pg.prompt).slice(0, MAX_PROMPT_TOKENS);
   const promptTooLong = tokenizeLike(pg.prompt).length > MAX_PROMPT_TOKENS;
-  const unknown = [...new Set(words.filter((w) => !s.vocab.includes(w)))];
+  const trained = new Set(s.tokenIds);
+  const unknown = [...new Set(words.filter((w) => !trained.has(s.vocab.indexOf(w))))];
   const ids = promptIds(s, words);
   const steps = s.trainingHistory.length;
   const lossNow = lossOf(s);
@@ -172,11 +173,8 @@ function render() {
   const controls = el('div', { class: 'card' }, [
     el('label', {}, ['Your prompt (saved)', prompt]),
     el('p', { class: 'fig-caption', style: 'margin-top:.4rem' }, ['Cut into pieces: ', ...words.map((w) => el('span', { class: 'chip', style: 'font-size:.9rem; padding:.1rem .5rem; margin-right:.25rem', text: w }))]),
-    promptTooLong ? el('p', { class: 'fig-caption problem', style: 'margin-top:.6rem', text: `Only the first ${MAX_PROMPT_TOKENS} words of the prompt are used.` }) : null,
-    unknown.length ? el('p', { class: 'fig-caption', style: 'margin-top:.6rem' }, [
-      `The model has never seen the piece${unknown.length > 1 ? 's' : ''} ${unknown.map((w) => `“${w}”`).join(', ')} — skipped. `,
-      el('button', { class: 'ghost', style: 'color: var(--accent)', text: `Give ${unknown.length > 1 ? 'these pieces' : 'this piece'} a ticket (random meaning)`, onclick: () => addWords(unknown) }),
-    ]) : null,
+    promptTooLong ? el('p', { class: 'fig-caption problem', style: 'margin-top:.6rem', text: `Only the first ${MAX_PROMPT_TOKENS} pieces of the prompt are used.` }) : null,
+    unknown.length ? el('p', { class: 'fig-caption', style: 'margin-top:.6rem', text: `${unknown.map((w) => `“${w}”`).join(', ')} never appear${unknown.length > 1 ? '' : 's'} in your training text, so their rows are still random — the model has a ticket for them but has learned nothing about them.` }) : null,
     el('div', { class: 'controls', style: 'margin-top: .9rem' }, [
       el('label', {}, ['Words to write', stepsInput]),
       el('label', {}, [`Creativity (temperature) — ${pg.temperature <= 0 ? 'always the favourite' : pg.temperature < 0.8 ? 'mostly the favourite' : pg.temperature <= 1.2 ? 'roll the dice as the model bets' : 'wild'}`, tempInput]),
@@ -234,7 +232,7 @@ function render() {
     callout('try', `<ul>
       <li>Train 25 steps and compare the two columns. The fresh model spreads its bets thinly; yours should reproduce your text almost word for word — it has memorised it, which is all a tiny model trained on one sentence can do.</li>
       <li>Start the prompt with a word from the <em>middle</em> of your text. Does your model continue correctly from there?</li>
-      <li>Turn creativity up to 1.5 and hit “different draw” a few times. Same weights, different words — that's sampling, and it's why a chatbot never answers exactly the same way twice.</li>
+      <li>Turn creativity up to 1.5 and hit “different draw” a few times. Same weights, different words — that's sampling, and it's why a chatbot with the temperature above zero rarely answers the same way twice.</li>
       <li>Change the training text on the Start page to two or three sentences that share words, train 50 steps, and see if it learns to switch between them.</li>
     </ul>`),
   ]);
@@ -245,14 +243,14 @@ function render() {
     el('div', { class: 'card flush' }, el('div', { class: 'scroll' }, el('table', { class: 'pred scale' }, [
       el('thead', {}, el('tr', {}, ['', 'This book', 'A large model (order of magnitude)'].map((t) => el('th', { text: t })))),
       el('tbody', {}, [
-        ['Dictionary', `${s.vocab.length} words`, '~100,000 word-pieces'],
-        ['Numbers per word (d)', `${s.config.dim}`, '~10,000'],
+        ['Dictionary', `${s.vocab.length} pieces`, '~100,000 pieces'],
+        ['Numbers per piece (d)', `${s.config.dim}`, '~10,000'],
         ['Attention heads', '1', '~100 per layer'],
         ['Blocks stacked', '1', '~100'],
         ['Weights to learn', `${params.toLocaleString()}`, '~100,000,000,000+'],
         ['Training text', `${d.tokens.length} tokens`, '~10,000,000,000,000 tokens'],
         ['How gradients are found', 'backpropagation', 'backpropagation'],
-        ['Tokenizer', `BPE, ${s.vocab.length} pieces`, 'BPE, 50,000–256,000 pieces'],
+        ['Tokenizer', `byte-level BPE, 300 merges`, 'byte-level BPE, ~50,000–250,000 merges'],
       ].map((r) => el('tr', {}, r.map((c, i) => el('td', { class: i === 0 ? 'word' : '', text: c }))))),
     ]))),
     callout('key', `<p>Tokens → embeddings → attention → feed-forward → next-word bet, repeated. If you followed the numbers in this book, you understand the machine. The rest is engineering and scale.</p>`),

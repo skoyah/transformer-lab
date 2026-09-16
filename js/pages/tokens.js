@@ -1,4 +1,4 @@
-import { getExperiment, getDerived, setSentence, sentenceProblem } from '../state.js';
+import { getExperiment, getDerived, setSentence, sentenceProblem, usedIds } from '../state.js';
 import { bpeFor, tokenize, tokenizerOf, tokenizeWords, tokenSpans, WORD_START, BPE_PLAYER_STEPS } from '../transformer.js';
 import { CORPUS } from '../corpus.js';
 import { initPage, bindRender, el, esc, lesson, prose, callout, underHood, matrixTable, chapterNav, caption, windowOf, sliceRows, lensBar, pieceChips } from '../ui.js';
@@ -39,7 +39,7 @@ function strawberryCallout(cut) {
   const pieces = cut(word);
   const rs = [...word].filter((c) => c === 'r').length;
   const per = pieces.map((p) => `“${esc(p.replace(WORD_START, ''))}”${[...p].filter((c) => c === 'r').length ? ` (${[...p].filter((c) => c === 'r').length} r)` : ''}`).join(' + ');
-  return callout('key', `<p><strong>Why chatbots can't count the r's in “strawberry”.</strong> The model never receives letters. It receives ${pieces.length} tickets — ${per} — and the fact that “strawberry” has ${rs} r's is nowhere in those numbers. To answer, the model has to have <em>learned</em>, from text, how each piece is spelled. That is a strange thing to be bad at and a natural consequence of tokenization; it also explains why models are clumsy with rhymes, character counts and reversing words.</p>`, 'Consequence');
+  return callout('key', `<p><strong>Why chatbots struggle to count the r's in “strawberry”.</strong> The model never receives letters. It receives ${pieces.length} tickets — ${per} — and each ticket is just a number: that “ber” contains an r is written nowhere in its ticket. Real tokenizers cut the word into different pieces than ours, but none of them hands the model the letters. To answer, the model has to have <em>learned</em>, from text, how each piece is spelled. That is a strange thing to be bad at and a natural consequence of tokenization; it also explains why models are clumsy with rhymes, character counts and reversing words.</p>`, 'Consequence');
 }
 
 function render() {
@@ -72,7 +72,7 @@ function render() {
 
   const pieces = lesson('Step one: cut it into pieces', [
     prose(`<p>The model doesn't work with a sentence, it works with a list of <strong>tokens</strong>. The obvious choice — one token per word — has two problems. A word the model has never seen is a dead end: there is no row for it. And the dictionary grows without bound, because every spelling, every name and every typo needs its own entry. Cutting into single letters fixes both, but then a sentence becomes a very long list and the model has to relearn what “cat” is from c, a, t every time.</p>
-      <p>So real models cut text into <strong>pieces</strong> that range from a single character up to a whole common word: “tokenization” might become “token” + “ization”; a rare name becomes a handful of fragments; “the” stays one piece. Nothing is a dead end, because in the worst case a word falls apart into characters. This book uses the most common way of deciding the pieces, <strong>byte-pair encoding</strong> (BPE), which is what GPT, Llama and Mistral use.</p>
+      <p>So real models cut text into <strong>pieces</strong> that range from a single character up to a whole common word: “tokenization” might become “token” + “ization”; a rare name becomes a handful of fragments; “the” stays one piece. Nothing is a dead end, because in the worst case a word falls apart into characters. This book uses the most common way of deciding the pieces, <strong>byte-pair encoding</strong> (BPE), used in some variant by GPT, Llama and Mistral.</p>
       <p>BPE is learned, not designed. Start from the smallest units — not letters but the <strong>256 possible bytes</strong>, so that any character in any language, and any emoji, can be represented (a letter like “ã” is two bytes, “🍓” is four). Count which two neighbouring symbols sit next to each other most often, glue them into one new symbol, and repeat. Every merge is learned from a body of text — a real tokenizer's from billions of words, this book's from a small corpus of ${corpusWords} words of plain English that ships with it. The merges are learned once and then frozen; your sentence is cut with them, it does not change them. Case is kept: “Hello” and “hello” start as different bytes and end as different tokens, exactly as in GPT-style models.</p>`),
     callout('idea', `<p>It is how you learn to read fast. At first you spell out c-a-t; after seeing “cat” a few hundred times, it is one glance. Rare words you still sound out in chunks. BPE does the same by counting.</p>`),
     player({ id: 'bpe', track: false, key: `corpus|${tok.merges}`, scene: bpeScene({
@@ -87,21 +87,21 @@ function render() {
   ]);
 
   const numbering = lesson('Step two: give every piece a number', [
-    prose(`<p>Next the model keeps a <strong>dictionary</strong>: every distinct piece it has ever seen, with a number next to it. Turning the tokens into numbers is then just a lookup.</p>`),
+    prose(`<p>Next comes the <strong>dictionary</strong>: every piece the tokenizer can produce, with a number next to it. It is fixed before training starts — every piece already has a ticket, whether or not your text uses it. Turning the tokens into numbers is then just a lookup.</p>`),
     callout('idea', `<p>It works like a coat check. Hand over a piece, get a ticket number. Hand over the same piece later and you get the <em>same</em> number — “${esc(d.tokens[0])}” is always ticket ${d.tokenIds[0]} in this dictionary, no matter where it appears.</p>`),
-    player({ id: 'tokenIds', scene: idScene({ tokens: sliceRows(d.tokens, win), ids: sliceRows(d.tokenIds, win), vocab: s.vocab, offset: win.start, idle: 'Press play to look each token up in the dictionary.' }) }),
-    caption('Highlighted dictionary rows are pieces in your current text. Pieces from earlier texts keep their tickets.'),
+    player({ id: 'tokenIds', scene: idScene({ tokens: sliceRows(d.tokens, win), ids: sliceRows(d.tokenIds, win), vocab: s.vocab, offset: win.start, showIds: usedIds(), idle: 'Press play to look each token up in the dictionary.' }) }),
+    caption(`The dictionary has ${s.vocab.length} pieces — the 256 single bytes (tickets 0–255) and one ticket per learned merge (256–${s.vocab.length - 1}) — fixed before any training. Only the rows your text uses are shown.`),
     callout('try', `<ul>
-      <li>Add a word that isn't in the text yet — say, <em>“hat”</em>. It is cut into pieces; pieces already in the dictionary keep their tickets, new ones get the next free numbers.</li>
+      <li>Add a word that isn't in the text yet — say, <em>“hat”</em>. It is cut into pieces, and every piece already has a ticket; a new row of the dictionary simply becomes used.</li>
       <li>Repeat a word. Its pieces get the same IDs each time. The model can't yet tell the two copies apart — Chapter 2 fixes that.</li>
-      <li>Put a made-up word in your prompt in Chapter 6. It still becomes tokens — that is the whole point of subwords. (Pieces never seen in your text have no ticket yet; a tokenizer trained on the whole web almost never meets one.)</li>
+      <li>Put a made-up word, or an emoji, in your prompt in Chapter 6. It still becomes tokens the model can use — that is the whole point of a byte-level dictionary: it can never meet a piece it doesn't know.</li>
     </ul>`, null, [
       { label: 'Add “hat” to the text', run: () => setSentence(`${getExperiment().sentence} hat`), then: 'tokenIds' },
       { label: `Repeat “${esc(words[0] || '')}” at the end`, run: () => setSentence(`${getExperiment().sentence} ${words[0] || ''}`), then: 'tokenIds' },
     ]),
     callout('key', `<p>A token is whatever the tokenizer says it is — often a word, sometimes a fragment, occasionally a single character. Ticket numbers carry no meaning: “cat” being 1 and “sat” being 2 does not make them similar. Meaning is added in the next chapter, and it is learned. Real vocabularies hold from about 30,000 pieces (BERT) through 50,257 (GPT-2) and 128,000 (Llama 3) to 256,000 (Gemma), learned once from a huge corpus and then frozen.</p>`),
-    underHood('merges = learnBpe(text, 50)   tokens = applyBpe(text, merges)   ids = tokens.map(t => vocab.indexOf(t))',
-      `<p>Byte-pair encoding: Sennrich, Haddow &amp; Birch (2016); the byte-level variant with a leading-space convention is GPT-2's (Radford et al. 2019). Other subword families exist — WordPiece (BERT) and Unigram (T5) — and solve the same problem. The vocabulary only ever grows: a new piece is appended, existing IDs are never renumbered, so every piece's row in the embedding table (next chapter) stays put.</p>`),
+    underHood('merges = learnBpe(corpus, 300)   tokens = applyBpe(text, merges)   ids = tokens.map(t => vocab.indexOf(t))   vocab = 256 bytes + 300 merges',
+      `<p>Byte-pair encoding: Sennrich, Haddow &amp; Birch (2016); the byte-level variant with a leading-space convention is GPT-2's (Radford et al. 2019), which also lays the vocabulary out this way: bytes first, then merges in the order they were learned. Other subword families exist — WordPiece (BERT) and Unigram (T5) — and solve the same problem. Punctuation gets a leading space byte too, so “mat.” and “mat .” tokenise the same here; GPT-2's pre-tokenizer keeps that distinction.</p>`),
   ]);
 
   content.replaceChildren(chapterControls(STAGES_HERE), intro, pieces, numbering, chapterNav('tokens.html'));

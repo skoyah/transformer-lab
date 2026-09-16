@@ -1,5 +1,5 @@
 import { crossEntropy, lossOf, cloneWeights } from '../transformer.js';
-import { getExperiment, getDerived, setWeightCell, setWeights, setLearningRate, setCausal, train, trainStepAsync, trainMany, untrainedExperiment } from '../state.js';
+import { getExperiment, getDerived, setWeightCell, setWeights, setLearningRate, setCausal, train, trainStepAsync, trainMany, untrainedExperiment, usedIds } from '../state.js';
 import { initPage, bindRender, el, esc, fmt, pct, lesson, prose, callout, underHood, matrixTable, softmaxBars, compareToggle, compareOn, chapterNav, tokenLabelsWin, dimLabels, windowOf, sliceRows, lensBar } from '../ui.js';
 import { player, chapterControls, pauseAll, SPEEDS } from '../player.js';
 import { matmulScene, rowScene, predictionScene, vec } from '../scenes.js';
@@ -56,6 +56,14 @@ function render() {
   const hits = d.prediction.slice(0, n - 1).filter((p, i) => p.token === d.tokens[i + 1]).length;
   const vocabLabels = s.vocab;
   const fresh = compareOn() ? untrainedExperiment() : null;
+  // Columns: the pieces your text uses, plus one column for all other pieces.
+  const used = usedIds();
+  const V = s.vocab.length;
+  const otherLabel = `other ×${V - used.length}`;
+  const colsPlus = [...used.map((id) => vocabLabels[id]), otherLabel];
+  const probsView = (M) => M.map((r) => [...used.map((id) => r[id]), r.reduce((a, v, id) => (used.includes(id) ? a : a + v), 0)]);
+  const logitsView = (M) => M.map((r) => [...used.map((id) => r[id]), NaN]);
+  const colOf = (id) => { const i = used.indexOf(id); return i >= 0 ? i : used.length; };
 
   // ---- The two-"the"s puzzle: a word that appears twice with different successors ----
   let puzzle = null;
@@ -69,7 +77,7 @@ function render() {
       { label: 'Zero the position table and allow peeking', run: () => { setWeights({ positional: getExperiment().weights.positional.map((r) => r.map(() => 0)) }); setCausal(false); }, then: 'prediction' },
       { label: 'Zero the position table only', run: () => setWeights({ positional: getExperiment().weights.positional.map((r) => r.map(() => 0)) }), then: 'prediction' },
     ])
-    : callout('key', `<p><strong>A puzzle for your text:</strong> put the same word in twice with different words after it (the default “the cat sat on the mat” has “the”→cat and “the”→mat). Both copies start from the same embedding row — only the position pattern and attention can tell them apart. Change the text on the Start page and come back.</p>`, 'A puzzle');
+    : callout('key', `<p><strong>A puzzle for your text:</strong> put the same piece in twice with different pieces after it (the default “the cat sat by the door” has “the”→cat and “the”→door). Both copies start from the same embedding row — only the position pattern and attention can tell them apart. Change the text on the Start page and come back.</p>`, 'A puzzle');
 
   // ---- Nudge one number: the gradient, done by hand ----
   if (nudge.name === 'Wout' && nudge.r === 0 && nudge.c === 0 && !nudge.touched) { nudge.r = d.prediction[n - 1].id; nudge.touched = true; }
@@ -107,43 +115,43 @@ function render() {
   ]);
 
   const scoring = lesson('Score every word in the dictionary', [
-    prose(`<p>Each token now has a final vector (N₂ from Chapter 4). To turn that into a guess about the next word, we need one more table: <strong>Wout</strong>, with one row per dictionary word. The score for a candidate word is the dot product of the token's vector with that word's row — the same “how well do these two match” operation attention used.</p>`),
+    prose(`<p>Each token now has a final vector (N₂ from Chapter 4). To turn that into a guess about the next piece, we need one more table: <strong>Wout</strong>, with one row per piece in the dictionary — all ${V} of them. The score for a candidate piece is the dot product of the token's vector with that piece's row — the same “how well do these two match” operation attention used.</p>`),
     el('div', { class: 'card figure' }, [
       compareToggle(render),
-      matrixTable({ title: 'Wout — one scoring row per word', matrix: s.weights.Wout, rowLabels: s.vocab.map((w, i) => `${i} ${w}`), colLabels: dims, editable: true,
-        highlightRows: new Set(s.tokenIds), onEdit: (r, c, v) => setWeightCell('Wout', r, c, v), compare: fresh ? fresh.weights.Wout : null }),
-      el('p', { class: 'fig-caption', text: 'Sometimes called the “unembedding”: it maps from coordinates back to words.' }),
+      matrixTable({ title: 'Wout — one scoring row per piece', matrix: s.weights.Wout, rowLabels: s.vocab.map((w, i) => `${i} ${w}`), colLabels: dims, editable: true,
+        rows: used, onEdit: (r, c, v) => setWeightCell('Wout', r, c, v), compare: fresh ? fresh.weights.Wout : null }),
+      el('p', { class: 'fig-caption', text: `Sometimes called the “unembedding”: it maps from coordinates back to pieces. ${V} rows, one per piece in the dictionary; only the ${used.length} your text uses are shown, but every row is scored.` }),
     ]),
     lensBar(d.tokens),
     player({ id: 'logits', scene: matmulScene({
-      A: W(d.norm2), B: s.weights.Wout, C: W(d.logits), aTitle: 'N₂', bTitle: 'Wout', cTitle: 'Scores', aRows: toks, aCols: dims, bCols: vocabLabels, bByRow: true,
-      idle: 'Press play to score each candidate word at each position.',
-      done: 'Row = the position we are standing at. Column = a candidate for the next word.',
+      A: W(d.norm2), B: used.map((id) => s.weights.Wout[id]), C: W(d.logits).map((r) => used.map((id) => r[id])), aTitle: 'N₂', bTitle: 'Wout', cTitle: 'Piece scores', aRows: toks, aCols: dims, bCols: used.map((id) => vocabLabels[id]), bByRow: true,
+      idle: `Press play to score each candidate piece at each position. (Shown: the ${used.length} pieces in your text; the other ${V - used.length} rows of Wout are scored exactly the same way.)`,
+      done: 'Row = the position we are standing at. Column = a candidate for the next piece.',
     }) }),
   ]);
 
   const betting = lesson('Turn scores into a bet', [
     prose(`<p>Softmax again — the same move as in attention — turns each row of scores into probabilities that add up to 100%. Now the model is making a proper bet: “after this word, I'd put 40% on <em>sat</em>, 25% on <em>the</em>…”. The favourite is its prediction.</p>`),
     player({ id: 'probs', scene: rowScene({
-      inputs: [{ title: 'Scores', matrix: W(d.logits), rowLabels: toks, colLabels: vocabLabels }],
-      output: { title: 'Probabilities', matrix: W(d.probs), rowLabels: toks, colLabels: vocabLabels, heat: 'sequential', cornerLabel: 'after \\ word' },
-      idle: 'Press play to turn each row of scores into a bet.',
+      inputs: [{ title: 'Piece scores', matrix: logitsView(W(d.logits)), rowLabels: toks, colLabels: colsPlus }],
+      output: { title: 'Probabilities', matrix: probsView(W(d.probs)), rowLabels: toks, colLabels: colsPlus, heat: 'sequential', cornerLabel: 'after \\ piece' },
+      idle: `Press play to turn each row of scores into a bet. The last column gathers the probability given to the ${V - used.length} pieces not in your text — a fresh model spreads its bets over all ${V}.`,
       explain: (i) => {
         const g = win.rows[i];
         const exps = d.logits[g].map((v) => Math.exp(v));
         const sum = exps.reduce((a, b) => a + b, 0);
         const top = d.logits[g].map((v, j) => j).sort((a, b) => d.logits[g][b] - d.logits[g][a]).slice(0, 12);
         return {
-          caption: `Row <b>${g}</b> — after “${esc(d.tokens[g])}”: e to each score, divide by the total.${s.vocab.length > 12 ? ' (Bars show the 12 strongest candidates.)' : ''}`,
-          worked: `<span class="eq">e^scores =</span><span class="a">${vec(exps.slice(0, 12))}${exps.length > 12 ? ' …' : ''}</span><span class="eq">sum =</span><b>${fmt(sum)}</b><span class="eq">bets =</span><span class="result">${vec(d.probs[g].slice(0, 12))}${exps.length > 12 ? ' …' : ''}</span>`,
+          caption: `Row <b>${g}</b> — after “${esc(d.tokens[g])}”: raise e (≈ 2.72) to each of the ${V} scores, divide by the total. (Bars show the 12 strongest candidates.)`,
+          worked: `<span class="eq">e^scores (pieces in your text) =</span><span class="a">${vec(used.map((id) => exps[id]))}</span><span class="eq">sum over all ${V} =</span><b>${fmt(sum)}</b><span class="eq">bets =</span><span class="result">${vec(used.map((id) => d.probs[g][id]))}</span>`,
           extra: softmaxBars({ labels: top.map((j) => vocabLabels[j]), scores: top.map((j) => d.logits[g][j]), stepMs: SPEEDS[s.animation.speed] || SPEEDS.normal }),
         };
       },
       done: 'Rows sum to 1.',
     }) }),
-    player({ id: 'prediction', scene: predictionScene({ probs: W(d.probs), vocab: vocabLabels, tokens: W(d.tokens), prediction: W(d.prediction), nextTokens: win.rows.map((g) => (g + 1 < n ? d.tokens[g + 1] : null)), offset: win.start,
+    player({ id: 'prediction', scene: predictionScene({ probs: probsView(W(d.probs)), vocab: colsPlus, tokens: W(d.tokens), prediction: W(d.prediction).map((p) => ({ ...p, id: colOf(p.id) })), nextTokens: win.rows.map((g) => (g + 1 < n ? d.tokens[g + 1] : null)), offset: win.start,
       idle: 'Press play to pick the favourite at each position and check it against the text.' }) }),
-    el('p', { class: 'fig-caption', text: `${hits} of ${n - 1} next words guessed right.${s.config.causal ? '' : ' Careful: “no peeking” is off, so the model can see the answer — turn it on in Chapter 3 for an honest test.'}` }),
+    el('p', { class: 'fig-caption', text: `${hits} of ${n - 1} next pieces guessed right.${s.config.causal ? '' : ' Careful: “no peeking” is off, so the model can see the answer — turn it on in Chapter 3 for an honest test.'}` }),
     puzzleBox,
   ]);
 
@@ -155,7 +163,7 @@ function render() {
 
   const learning = lesson('Teach it to bet better', [
     prose(`<p>How wrong is the model? We measure its <strong>surprise</strong>: for each position, take the probability it gave to the word that actually came next and ask “how unlikely did it think that was?” Give the right word 100% and surprise is 0; 50% is 0.69; 10% is 2.3; 1% is 4.6. (It's −log of the probability.) Averaged over the text, that single number is what training tries to push down. Its formal name is cross-entropy loss.</p>`),
-    el('div', { class: 'worked', html: `<span class="lhs">surprise at position ${t}</span><span class="eq">=</span> −log P(“${esc(d.tokens[t + 1])}” after “${esc(d.tokens[t])}”) <span class="eq">=</span> −log <b>${fmt(pActual, 3)}</b> <span class="eq">=</span> <span class="result">${fmt(-Math.log(Math.max(pActual, 1e-12)))}</span> &nbsp; <span class="eq">— guessing evenly among ${s.vocab.length} words would be −log(1/${s.vocab.length}) = ${fmt(baseline)}</span>` }),
+    el('div', { class: 'worked', html: `<span class="lhs">surprise at position ${t}</span><span class="eq">=</span> −log P(“${esc(d.tokens[t + 1])}” after “${esc(d.tokens[t])}”) <span class="eq">=</span> −log <b>${fmt(pActual, 3)}</b> <span class="eq">=</span> <span class="result">${fmt(-Math.log(Math.max(pActual, 1e-12)))}</span> &nbsp; <span class="eq">— guessing evenly among the ${s.vocab.length} pieces would be −log(1/${s.vocab.length}) = ${fmt(baseline)}</span>` }),
     prose(`<p>Training is remarkably unglamorous. For every one of the ${paramCount} numbers in the weight tables, ask “if I nudged this up a hair, would surprise go up or down?” — then move it a small step the helpful way. The size of that step is the <strong>learning rate</strong>. Repeat.</p>
       <p>Trying every nudge one by one works but is slow (two full runs per number). There is a trick: the chain rule lets you get every slope from a <em>single</em> pass backwards through the stages — <strong>backpropagation</strong>. That is what the buttons below use. The widget after the analogy does it the slow way for one number, so you can see they agree.</p>`),
     callout('idea', `<p>It's tuning an instrument with ${paramCount} pegs at once. Trying each peg by ear works; backpropagation is like knowing, from the way the chord sounds, which way every peg should turn — all at once, from one listen.</p>`),
@@ -163,7 +171,7 @@ function render() {
     el('div', { class: `card player ${training.running ? 'playing' : ''}`, dataset: { stage: 'training' } }, [
       el('div', { class: 'kpis' }, [
         el('div', {}, [el('b', { text: fmt(loss, 3) }), el('span', { text: 'surprise right now (lower is better)' })]),
-        el('div', {}, [el('b', { text: `${hits}/${n - 1}` }), el('span', { text: 'next words correct' })]),
+        el('div', {}, [el('b', { text: `${hits}/${n - 1}` }), el('span', { text: 'next pieces correct' })]),
         el('div', {}, [el('b', { text: `${s.trainingHistory.length}` }), el('span', { text: 'training steps so far' })]),
       ]),
       sparkline(s.trainingHistory),
@@ -178,7 +186,7 @@ function render() {
       el('p', { class: 'fig-caption', text: 'Every step rewrites the saved weight tables, so every stage in this book goes back to waiting: the embeddings moved, the attention pattern shifted, the bets sharpened. Replay any of them to see the new numbers.' }),
     ]),
     callout('try', `<ul>
-      <li>Train for a while, then replay the prediction stage above. Watch the ✓ column fill in and the surprise curve fall towards 0. Then revisit Chapter 3 — the attention pattern has reorganised itself.</li>
+      <li>Train for a while, then replay the prediction stage above. Watch the ✓ column fill in and the surprise curve fall towards 0. Then revisit Chapter 2 — the embedding rows have moved (turn on “compare with the untrained model”).</li>
       <li>Set the learning rate to 1 and train. Too big a step overshoots: surprise may jump <em>up</em>. Bring it back to 0.1.</li>
       <li>Bookmark the model on the Start page before training, so you can compare before and after in Chapter 6.</li>
     </ul>`, null, [

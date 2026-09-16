@@ -13,14 +13,14 @@ const content = document.getElementById('content');
 
 const STAGE_WHAT = {
   tokens: 'cut the text into pieces (BPE)', tokenIds: 'look each piece up in the dictionary',
-  embeddings: 'swap each ID for its coordinates', positionalInput: 'stamp on where the word sits',
-  Q: 'what each word is asking', K: 'what each word is offering', V: 'what each word would say',
+  embeddings: 'swap each ID for its coordinates', positionalInput: 'stamp on where the piece sits',
+  Q: 'what each piece is asking', K: 'what each piece is offering', V: 'what each piece would say',
   KT: 'flip K so questions can meet offers', scores: 'how well every question matches every offer',
   scaledScores: 'tame the numbers, hide the future', attentionWeights: 'turn matches into shares of attention',
-  attentionOutput: 'each word collects what it listened to', residual1: 'keep the original, add what was heard',
+  attentionOutput: 'each piece collects what it listened to', residual1: 'keep the original, add what was heard',
   norm1: 'normalise the volume', ffnHidden: 'a moment of private thought', ffnOutput: 'back to the usual size',
   residual2: 'keep the original, add the thought', norm2: 'normalise again',
-  logits: 'score every dictionary word', probs: 'turn scores into a bet', prediction: 'pick the favourite',
+  logits: 'score every piece in the dictionary', probs: 'turn scores into a bet', prediction: 'pick the favourite',
 };
 
 function heroPanel() {
@@ -46,7 +46,7 @@ function heroPanel() {
       prose(`<p>Everything in this book is computed from this text. A sentence or two is the easiest to follow — the model is small and you'll want to read every number — but up to ${MAX_TOKENS} tokens work: the tables then show a window of positions you can slide. Press Enter to apply.</p>`),
       sentence,
       problem,
-      el('p', { class: 'fig-caption', text: `${d.tokens.length} tokens (max ${MAX_TOKENS}) · ${s.vocab.length} words in the dictionary · ${s.config.dim} numbers per word` }),
+      el('p', { class: 'fig-caption', text: `${d.tokens.length} tokens (max ${MAX_TOKENS}) · ${new Set(s.tokenIds).size} of the dictionary's ${s.vocab.length} pieces used · ${s.config.dim} numbers per piece` }),
     ]),
     el('div', { class: 'card' }, [
       el('h3', { style: 'margin-top:0', text: 'Right now the model thinks…' }),
@@ -147,7 +147,7 @@ function settingsPanel() {
     el('div', { class: 'card' }, [
       el('div', { class: 'controls' }, [
         el('label', {}, ['Random seed', seed]),
-        el('label', {}, ['Numbers per word (d)', dim]),
+        el('label', {}, ['Numbers per piece (d)', dim]),
         el('label', {}, ['Hidden size', hidden]),
         el('label', {}, ['Learning rate', lr]),
         el('label', { class: 'inline' }, [causal, 'No peeking at later words']),

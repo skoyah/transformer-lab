@@ -156,7 +156,8 @@ function render() {
       { label: 'Wk[0][0] → 5', run: () => setWeightCell('Wk', 0, 0, 5), then: 'attentionWeights' },
       { label: s.config.causal ? 'Allow peeking' : 'No peeking again', run: () => setCausal(!getExperiment().config.causal), then: 'scaledScores' },
     ]),
-    callout('key', `<p>Attention is just: <em>score every pair, turn scores into shares, blend</em>. Real models run several of these side by side (“heads”) and stack many layers, but each head is exactly this page.</p>`),
+    callout('key', `<p>Attention is just: <em>score every pair, turn scores into shares, blend</em>. Real models run several of these side by side (“heads”, each working on a slice of the numbers, their results joined by one more table) and stack many layers — but each head does exactly what this page does.</p>`),
+    callout('key', `<p><strong>Why the trained heatmap stays flat here.</strong> On a single text the model can memorise the answer without choosing where to look: every position's past is unique, so “take the average of what came before, then think” is enough. Attention earns its keep when the same pieces in a different order must give a different answer — many different texts, not one. The presets above show what a sharp pattern looks like; a model trained on real text learns patterns like them on its own.</p>`, 'Honest note'),
   ]);
 
   content.replaceChildren(chapterControls(STAGES_HERE), why, lenses, scoring, tidy, softmax, collect, chapterNav('attention.html'));

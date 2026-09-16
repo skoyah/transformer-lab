@@ -192,14 +192,15 @@ export function tokenizeScene({ sentence, tokens, spans, idle, win = null }) {
 
 // Tokens → IDs, one lookup per step: the token travels to its dictionary
 // row, and the ticket number travels back into the chip.
-export function idScene({ tokens, ids, vocab, idle, offset = 0 }) {
+export function idScene({ tokens, ids, vocab, idle, offset = 0, showIds = null }) {
   const n = tokens.length;
   return {
     total: n,
     frame(k) {
       const i = k ? k - 1 : null;
       const body = row([
-        matrixTable({ title: 'The dictionary', matrix: vocab.map((w, id) => [id]), rowLabels: vocab, colLabels: ['ticket'], decimals: 0, heat: null, hlRow: k ? ids[i] : null, small: true }),
+        matrixTable({ title: 'The dictionary', matrix: vocab.map((w, id) => [id]), rowLabels: vocab, colLabels: ['ticket'], decimals: 0, heat: null, hlRow: k ? ids[i] : null, small: true,
+          rows: showIds, shapeNote: showIds ? `${vocab.length} pieces, showing the ${showIds.length} in your text` : null }),
         op('→'),
         el('div', { class: 'chips', style: 'align-self:center' }, [
           offset > 0 ? el('span', { class: 'chip todo', text: `… ${offset} earlier` }) : null,
